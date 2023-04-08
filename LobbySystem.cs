@@ -193,6 +193,7 @@ public class LobbySystem: MonoBehaviour
         SteamMatchmaking.LeaveLobby(ActualLobbyID);
     }
 
+    // TODO: This callback for some reason is not being called
     private void OnLobbyEnter(LobbyEnter_t pCallback)
     {
         ActualLobbyID = new CSteamID(pCallback.m_ulSteamIDLobby);
