@@ -42,6 +42,9 @@ public class Plugin : BaseUnityPlugin
 
     void Update()
     {
+        if (!SteamManager.Initialized)
+            return;
+
         SteamAPI.RunCallbacks();
         if (!firstSteamworksInit)
         {
