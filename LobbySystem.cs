@@ -59,12 +59,17 @@ namespace PoPM
         public Stack<string> GUIStack = new();
         public string JoinLobbyID = string.Empty;
         public CSteamID ActualLobbyID = CSteamID.Nil;
+        public CSteamID OwnerID = CSteamID.Nil;
         public bool isPauseMenu;
         public bool isInGame;
         public bool isGameLoaded;
         public bool inLobby;
         public bool isLobbyOwner;
-
+        
+        // idfk why making dummy vars assigns for the callback but it somehow makes the callbacks be called
+        private Callback<LobbyCreated_t> _lobbyCreated;
+        private Callback<LobbyEnter_t> _lobbyEntered;
+        
         private void Awake()
         {
             instance = this;
@@ -72,8 +77,8 @@ namespace PoPM
 
         private void Start()
         {
-            Callback<LobbyCreated_t>.Create(OnLobbyCreated);
-            Callback<LobbyEnter_t>.Create(OnLobbyEnter);
+            _lobbyCreated = Callback<LobbyCreated_t>.Create(OnLobbyCreated);
+            _lobbyEntered = Callback<LobbyEnter_t>.Create(OnLobbyEnter);
         }
 
         private void Update()
@@ -129,6 +134,7 @@ namespace PoPM
                             if (!inLobby)
                             {
                                 SteamMatchmaking.CreateLobby(ELobbyType.k_ELobbyTypePrivate, 4);
+
                                 inLobby = true;
                                 isLobbyOwner = true;
                             }
@@ -178,12 +184,31 @@ namespace PoPM
                             GUILayout.Space(5f);
 
                             if (GUILayout.Button("JOIN"))
-                                throw new NotImplementedException();
+                            {
+                                if (uint.TryParse(JoinLobbyID, out uint idLong))
+                                {
+                                    CSteamID lobbyId = new CSteamID(new AccountID_t(idLong), (uint)EChatSteamIDInstanceFlags.k_EChatInstanceFlagLobby | (uint)EChatSteamIDInstanceFlags.k_EChatInstanceFlagMMSLobby, EUniverse.k_EUniversePublic, EAccountType.k_EAccountTypeChat);
+                                    SteamMatchmaking.JoinLobby(lobbyId);
+                                }
+                                inLobby = true;
+                                isLobbyOwner = false;
+                                GUIStack.Push("Guest");
+                            }
 
                             if (GUILayout.Button("<color=#888888>BACK</color>"))
                                 GUIStack.Pop();
                             break;
                         }
+                    case "Guest":
+                        var ownerName = SteamFriends.GetFriendPersonaName(OwnerID);
+                        
+                        GUILayout.BeginHorizontal();
+                        GUILayout.FlexibleSpace();
+                        GUILayout.Label($"{ownerName} Lobby");
+                        GUILayout.FlexibleSpace();
+                        GUILayout.EndHorizontal();
+                        
+                        break;
                 }
                 GUILayout.EndVertical();
                 GUILayout.EndArea();
@@ -198,17 +223,24 @@ namespace PoPM
             SteamMatchmaking.LeaveLobby(ActualLobbyID);
         }
 
-        // TODO: This callback for some reason is not being called
         public void OnLobbyCreated(LobbyCreated_t pCallback)
         {
             ActualLobbyID = new CSteamID(pCallback.m_ulSteamIDLobby);
             Plugin.Logger.LogInfo($"Created lobby! {ActualLobbyID.GetAccountID().ToString()}");
+            
+            OwnerID = SteamUser.GetSteamID();
+            Plugin.Logger.LogInfo(OwnerID);
+            
+            SteamMatchmaking.SetLobbyData(ActualLobbyID, "owner", OwnerID.ToString());
         }
 
         public void OnLobbyEnter(LobbyEnter_t pCallback)
         {
             ActualLobbyID = new CSteamID(pCallback.m_ulSteamIDLobby);
             Plugin.Logger.LogInfo($"Joined lobby! {ActualLobbyID.GetAccountID().ToString()}");
+            
+            OwnerID = new CSteamID(ulong.Parse(SteamMatchmaking.GetLobbyData(ActualLobbyID, "owner")));
+            Plugin.Logger.LogInfo($"Host ID: {OwnerID}");
         }
     }
 }
