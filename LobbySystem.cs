@@ -92,13 +92,27 @@ namespace PoPM
             }
         }
 
+        public List<string> GetLobbyMembers()
+        {
+            int len = SteamMatchmaking.GetNumLobbyMembers(ActualLobbyID);
+            var ret = new List<string>(len);
+
+            for (int i = 0; i < len; i++)
+            {
+                var member = SteamMatchmaking.GetLobbyMemberByIndex(ActualLobbyID, i);
+                ret.Add(SteamFriends.GetFriendPersonaName(new CSteamID(member.m_SteamID)));
+            }
+
+            return ret;
+        }
+
         private void OnGUI()
         {
             var lobbyStyle = new GUIStyle(GUI.skin.box);
 
             if (!isInGame && isGameLoaded && GUIStack.Count != 0)
             {
-                GUILayout.BeginArea(new Rect((Screen.width - 220), (Screen.height - 550), 150f, 200f), string.Empty);
+                GUILayout.BeginArea(new Rect((Screen.width - 220), (Screen.height - 550), 150f, 500f), string.Empty);
                 GUILayout.BeginVertical(lobbyStyle);
                 switch (GUIStack.Peek())
                 {
@@ -149,7 +163,7 @@ namespace PoPM
 
                             GUILayout.BeginHorizontal();
                             GUILayout.FlexibleSpace();
-                            GUILayout.Label($"Lobby ID: {ActualLobbyID.GetAccountID().ToString()}");
+                            GUILayout.Label($"Lobby ID: {ActualLobbyID.GetAccountID()}");
 
                             if (GUILayout.Button("Copy ID"))
                             {
@@ -167,6 +181,18 @@ namespace PoPM
                                 GUIStack.Pop();
                             }
 
+                            GUILayout.BeginHorizontal();
+                            GUILayout.FlexibleSpace();
+                            GUILayout.Label($"PLAYERS");
+                            GUILayout.FlexibleSpace();
+                            GUILayout.EndHorizontal();
+
+                            GUILayout.FlexibleSpace();
+                            foreach (string elemento in GetLobbyMembers().ToArray())
+                            {
+                                GUILayout.Label(elemento);
+                            }
+                            GUILayout.FlexibleSpace();
                             break;
                         }
                     case "Join":
