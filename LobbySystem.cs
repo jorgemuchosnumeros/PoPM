@@ -59,17 +59,17 @@ namespace PoPM
         public Stack<string> GUIStack = new();
         public string JoinLobbyID = string.Empty;
         public CSteamID ActualLobbyID = CSteamID.Nil;
-        public CSteamID OwnerID = CSteamID.Nil;
+        public string OwnerName;
         public bool isPauseMenu;
         public bool isInGame;
         public bool isGameLoaded;
         public bool inLobby;
         public bool isLobbyOwner;
-        
+
         // idfk why making dummy vars assigns for the callback but it somehow makes the callbacks be called
         private Callback<LobbyCreated_t> _lobbyCreated;
         private Callback<LobbyEnter_t> _lobbyEntered;
-        
+
         private void Awake()
         {
             instance = this;
@@ -195,19 +195,27 @@ namespace PoPM
                                 GUIStack.Push("Guest");
                             }
 
-                            if (GUILayout.Button("<color=#888888>BACK</color>"))
+                            if (GUILayout.Button("<color=#ed0e0e>EXIT</color>"))
+                            {
+                                ExitLobby();
                                 GUIStack.Pop();
+                            }
+
                             break;
                         }
                     case "Guest":
-                        var ownerName = SteamFriends.GetFriendPersonaName(OwnerID);
-                        
                         GUILayout.BeginHorizontal();
                         GUILayout.FlexibleSpace();
-                        GUILayout.Label($"{ownerName} Lobby");
+                        GUILayout.Label($"{OwnerName} Lobby");
                         GUILayout.FlexibleSpace();
                         GUILayout.EndHorizontal();
-                        
+
+                        if (GUILayout.Button("<color=#ed0e0e>EXIT</color>"))
+                        {
+                            ExitLobby();
+                            GUIStack.Pop();
+                        }
+
                         break;
                 }
                 GUILayout.EndVertical();
@@ -219,28 +227,23 @@ namespace PoPM
         {
             inLobby = false;
             isLobbyOwner = false;
-            Plugin.Logger.LogInfo($"Leaving lobby! {ActualLobbyID.GetAccountID().ToString()}");
+            Plugin.Logger.LogInfo($"Leaving lobby! {ActualLobbyID.GetAccountID()}");
             SteamMatchmaking.LeaveLobby(ActualLobbyID);
         }
 
         public void OnLobbyCreated(LobbyCreated_t pCallback)
         {
             ActualLobbyID = new CSteamID(pCallback.m_ulSteamIDLobby);
-            Plugin.Logger.LogInfo($"Created lobby! {ActualLobbyID.GetAccountID().ToString()}");
-            
-            OwnerID = SteamUser.GetSteamID();
-            Plugin.Logger.LogInfo(OwnerID);
-            
-            SteamMatchmaking.SetLobbyData(ActualLobbyID, "owner", OwnerID.ToString());
+            Plugin.Logger.LogInfo($"Created lobby! {ActualLobbyID.GetAccountID()}");
         }
 
         public void OnLobbyEnter(LobbyEnter_t pCallback)
         {
             ActualLobbyID = new CSteamID(pCallback.m_ulSteamIDLobby);
-            Plugin.Logger.LogInfo($"Joined lobby! {ActualLobbyID.GetAccountID().ToString()}");
-            
-            OwnerID = new CSteamID(ulong.Parse(SteamMatchmaking.GetLobbyData(ActualLobbyID, "owner")));
-            Plugin.Logger.LogInfo($"Host ID: {OwnerID}");
+            Plugin.Logger.LogInfo($"Joined lobby! {ActualLobbyID.GetAccountID()}");
+
+            OwnerName = SteamFriends.GetFriendPersonaName(SteamMatchmaking.GetLobbyOwner(ActualLobbyID));
+            Plugin.Logger.LogInfo($"Host ID: {OwnerName}");
         }
     }
 }
