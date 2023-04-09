@@ -50,6 +50,18 @@ namespace PoPM
             LobbySystem.instance.isPauseMenu = false;
             LobbySystem.instance.isInGame = false;
             LobbySystem.instance.isGameLoaded = false;
+            
+            LobbySystem.instance.ExitLobby();
+        }
+    }
+    
+    // Called when exiting
+    [HarmonyPatch(typeof(MainMenu), "DoQuit")] //TODO: find another patch / standard method so it exits the lobby in any exit of the application
+    public class MainMenuDoQuitPatch
+    {
+        static void Prefix()
+        {
+            LobbySystem.instance.ExitLobby();
         }
     }
 
@@ -59,6 +71,7 @@ namespace PoPM
         public Stack<string> GUIStack = new();
         public string JoinLobbyID = string.Empty;
         public CSteamID ActualLobbyID = CSteamID.Nil;
+        public int MaxLobbyMembers = 8;
         public string OwnerName;
         public bool isPauseMenu;
         public bool isInGame;
@@ -67,7 +80,6 @@ namespace PoPM
         public bool isLobbyOwner;
 
         // idfk why making dummy vars assigns for the callback but it somehow makes the callbacks be called
-        private Callback<LobbyCreated_t> _lobbyCreated;
         private Callback<LobbyEnter_t> _lobbyEntered;
 
         private void Awake()
@@ -77,7 +89,6 @@ namespace PoPM
 
         private void Start()
         {
-            _lobbyCreated = Callback<LobbyCreated_t>.Create(OnLobbyCreated);
             _lobbyEntered = Callback<LobbyEnter_t>.Create(OnLobbyEnter);
         }
 
@@ -112,7 +123,7 @@ namespace PoPM
 
             if (!isInGame && isGameLoaded && GUIStack.Count != 0)
             {
-                GUILayout.BeginArea(new Rect((Screen.width - 220), (Screen.height - 550), 150f, 500f), string.Empty);
+                GUILayout.BeginArea(new Rect((Screen.width - 220), (Screen.height - 550), 150f, 500), string.Empty);
                 GUILayout.BeginVertical(lobbyStyle);
                 switch (GUIStack.Peek())
                 {
@@ -147,7 +158,7 @@ namespace PoPM
                         {
                             if (!inLobby)
                             {
-                                SteamMatchmaking.CreateLobby(ELobbyType.k_ELobbyTypePrivate, 4);
+                                SteamMatchmaking.CreateLobby(ELobbyType.k_ELobbyTypePrivate, MaxLobbyMembers);
 
                                 inLobby = true;
                                 isLobbyOwner = true;
@@ -186,13 +197,13 @@ namespace PoPM
                             GUILayout.Label($"PLAYERS");
                             GUILayout.FlexibleSpace();
                             GUILayout.EndHorizontal();
-
-                            GUILayout.FlexibleSpace();
-                            foreach (string elemento in GetLobbyMembers().ToArray())
+                            
+                            GUILayout.Space(5f);
+                            
+                            foreach (string member in GetLobbyMembers().ToArray())
                             {
-                                GUILayout.Label(elemento);
+                                GUILayout.Label(member);
                             }
-                            GUILayout.FlexibleSpace();
                             break;
                         }
                     case "Join":
@@ -221,7 +232,7 @@ namespace PoPM
                                 GUIStack.Push("Guest");
                             }
 
-                            if (GUILayout.Button("<color=#ed0e0e>EXIT</color>"))
+                            if (GUILayout.Button("<color=#888888>BACK</color>"))
                             {
                                 ExitLobby();
                                 GUIStack.Pop();
@@ -241,7 +252,20 @@ namespace PoPM
                             ExitLobby();
                             GUIStack.Pop();
                         }
+                        
+                        GUILayout.BeginHorizontal();
+                        GUILayout.FlexibleSpace();
+                        GUILayout.Label($"PLAYERS");
+                        GUILayout.FlexibleSpace();
+                        GUILayout.EndHorizontal();
 
+                        GUILayout.Space(5f);
+
+                        foreach (string member in GetLobbyMembers().ToArray())
+                        {
+                            GUILayout.Label(member);
+                        }
+                        
                         break;
                 }
                 GUILayout.EndVertical();
@@ -253,8 +277,12 @@ namespace PoPM
         {
             inLobby = false;
             isLobbyOwner = false;
+
             Plugin.Logger.LogInfo($"Leaving lobby! {ActualLobbyID.GetAccountID()}");
             SteamMatchmaking.LeaveLobby(ActualLobbyID);
+            
+            OwnerName = string.Empty;
+            ActualLobbyID = CSteamID.Nil;
         }
 
         public void OnLobbyCreated(LobbyCreated_t pCallback)
