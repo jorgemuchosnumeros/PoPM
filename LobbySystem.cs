@@ -144,6 +144,12 @@ namespace PoPM
                             GUILayout.BeginHorizontal();
                             GUILayout.FlexibleSpace();
                             GUILayout.Label($"Lobby ID: {ActualLobbyID.GetAccountID().ToString()}");
+
+                            if (GUILayout.Button("Copy ID"))
+                            {
+                                GUIUtility.systemCopyBuffer = ActualLobbyID.GetAccountID().ToString();
+                            }
+
                             GUILayout.FlexibleSpace();
                             GUILayout.EndHorizontal();
 
