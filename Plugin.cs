@@ -29,8 +29,7 @@ public class Plugin : BaseUnityPlugin
         
         Logger.LogInfo($"Plugin {PluginInfo.PLUGIN_GUID} is loaded!");
         
-        var harmony = new Harmony("patch.popm");
-        harmony.PatchAll();
+        new Harmony("patch.popm").PatchAll();
     }
 
     public static string BuildGUID => Assembly.GetExecutingAssembly().ManifestModule.ModuleVersionId.ToString();
