@@ -22,7 +22,12 @@ public class Plugin : BaseUnityPlugin
     public new static BepInEx.Logging.ManualLogSource Logger = null;
     
     public bool firstSteamworksInit;
-    
+
+    private void OnApplicationQuit()
+    {
+        LobbySystem.instance.ExitLobby();
+    }
+
     private void Awake()
     {
         Logger = base.Logger;
