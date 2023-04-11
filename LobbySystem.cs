@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using HarmonyLib;
 using Steamworks;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -10,9 +11,9 @@ namespace PoPM
     [HarmonyPatch(typeof(MainMenu), "Initialize")]
     public class MainMenuInitializePatch
     {
-        static void Prefix(MainMenu __instance)
+        static void Prefix()
         {
-            LobbySystem.instance.mainMenu = __instance.transform.GetChild(0).GetChild(0).GetChild(1).gameObject;
+            LobbySystem.instance.mainMenu = GameObject.Find("Menu/Canvas/mainMenu/VerticalGroup/");
 
             if (!LobbySystem.instance.isPauseMenu)
             {
@@ -54,7 +55,7 @@ namespace PoPM
                 LobbySystem.instance.isPauseMenu = false;
                 LobbySystem.instance.isInGame = false;
                 LobbySystem.instance.isGameLoaded = false;
-            
+
                 LobbySystem.instance.ExitLobby();
             }
         }
@@ -69,7 +70,7 @@ namespace PoPM
         public CSteamID actualLobbyID = CSteamID.Nil;
         public CSteamID ownerID = CSteamID.Nil;
         public string ownerName;
-        
+
         public int maxLobbyMembers = 8;
         public bool isPauseMenu;
         public bool isInGame;
@@ -199,9 +200,9 @@ namespace PoPM
                             GUILayout.Label($"PLAYERS");
                             GUILayout.FlexibleSpace();
                             GUILayout.EndHorizontal();
-                            
+
                             GUILayout.Space(5f);
-                            
+
                             foreach (string member in GetLobbyMembers().ToArray())
                             {
                                 GUILayout.Label(member);
@@ -253,7 +254,7 @@ namespace PoPM
                             ExitLobby();
                             GUIStack.Pop();
                         }
-                        
+
                         GUILayout.BeginHorizontal();
                         GUILayout.FlexibleSpace();
                         GUILayout.Label($"PLAYERS");
@@ -266,7 +267,7 @@ namespace PoPM
                         {
                             GUILayout.Label(member);
                         }
-                        
+
                         break;
                 }
                 GUILayout.EndVertical();
@@ -287,10 +288,9 @@ namespace PoPM
             Plugin.Logger.LogInfo($"Leaving lobby! {actualLobbyID.GetAccountID()}");
             SteamMatchmaking.LeaveLobby(actualLobbyID);
 
-            //TODO: Getting NullReference Exception when restarting/exiting game
-            //mainMenu.transform.GetChild(0).GetComponent<Image>().enabled = true;
-            //mainMenu.transform.GetChild(0).GetComponent<Button>().enabled = true;
-            //mainMenu.transform.GetChild(0).GetComponentInChildren<TextMesh>().color = new Color(1, 1, 1, 1);
+            mainMenu.transform.GetChild(0).GetComponent<Image>().enabled = false;
+            mainMenu.transform.GetChild(0).GetComponent<Button>().enabled = false;
+            mainMenu.transform.GetChild(0).GetComponentInChildren<TextMeshProUGUI>().color = new Color(1, 1, 1, 1f);
 
             ownerName = string.Empty;
             actualLobbyID = CSteamID.Nil;
@@ -309,29 +309,28 @@ namespace PoPM
 
             ownerID = SteamMatchmaking.GetLobbyOwner(actualLobbyID);
             ownerName = SteamFriends.GetFriendPersonaName(ownerID);
-            
+
             Plugin.Logger.LogInfo($"Host Name: {ownerName}");
 
             if (!isLobbyOwner)
             {
-                //TODO: apparently color wont change at all
-                //mainMenu.transform.GetChild(0).GetComponent<Image>().enabled = false;
-                //mainMenu.transform.GetChild(0).GetComponent<Button>().enabled = false;
-                //mainMenu.transform.GetChild(0).GetComponentInChildren<TextMesh>().color = new Color(0.5f, 0.5f, 0.5f, 1f);
+                mainMenu.transform.GetChild(0).GetComponent<Image>().enabled = false;
+                mainMenu.transform.GetChild(0).GetComponent<Button>().enabled = false;
+                mainMenu.transform.GetChild(0).GetComponentInChildren<TextMeshProUGUI>().color = new Color(1, 1, 1, 0.2f);
             }
         }
 
         private void OnLobbyChatUpdate(LobbyChatUpdate_t pCallback)
         {
             // Anything other than a join...
-            if ((pCallback.m_rgfChatMemberStateChange & (uint)EChatMemberStateChange.k_EChatMemberStateChangeEntered) ==  0)
+            if ((pCallback.m_rgfChatMemberStateChange & (uint)EChatMemberStateChange.k_EChatMemberStateChangeEntered) == 0)
             {
                 var id = new CSteamID(pCallback.m_ulSteamIDUserChanged);
 
                 // ...means the owner left.
                 if (ownerID == id)
                 {
-                   ExitLobby();
+                    ExitLobby();
                 }
             }
         }
