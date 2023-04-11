@@ -13,7 +13,7 @@ namespace PoPM
     {
         static void Prefix()
         {
-            LobbySystem.Instance.mainMenu = GameObject.Find("Menu/Canvas/mainMenu/VerticalGroup/"); //TODO: Returning null for some reason
+            LobbySystem.Instance.mainMenu = GameObject.Find("Menu/Canvas/MainMenu/VerticalGroup/");
 
             if (!LobbySystem.Instance.isPauseMenu)
             {
