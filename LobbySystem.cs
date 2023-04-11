@@ -1,6 +1,8 @@
+using System;
 using System.Collections.Generic;
 using HarmonyLib;
 using Steamworks;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -10,9 +12,9 @@ namespace PoPM
     [HarmonyPatch(typeof(MainMenu), "Initialize")]
     public class MainMenuInitializePatch
     {
-        static void Prefix(MainMenu __instance)
+        static void Prefix()
         {
-            LobbySystem.instance.mainMenu = __instance.transform.GetChild(0).GetChild(0).GetChild(1).gameObject;
+            LobbySystem.instance.MainMenu = GameObject.Find("Menu/Canvas/MainMenu/VerticalGroup/");
 
             if (!LobbySystem.instance.isPauseMenu)
             {
@@ -49,28 +51,32 @@ namespace PoPM
     {
         static void Prefix()
         {
-            if (LobbySystem.instance != null)
-            {
-                LobbySystem.instance.isPauseMenu = false;
-                LobbySystem.instance.isInGame = false;
-                LobbySystem.instance.isGameLoaded = false;
-            
-                LobbySystem.instance.ExitLobby();
-            }
+            LobbySystem.instance.isPauseMenu = false;
+            LobbySystem.instance.isInGame = false;
+            LobbySystem.instance.isGameLoaded = false;
+
+            LobbySystem.instance.ExitLobby();
         }
     }
 
+    // Called when exiting
+    [HarmonyPatch(typeof(MainMenu), "DoQuit")] //TODO: find another patch / standard method so it exits the lobby in any exit of the application
+    public class MainMenuDoQuitPatch
+    {
+        static void Prefix()
+        {
+            LobbySystem.instance.ExitLobby();
+        }
+    }
 
     public class LobbySystem : MonoBehaviour
     {
         public static LobbySystem instance;
         public Stack<string> GUIStack = new();
-        public string joinLobbyID = string.Empty;
-        public CSteamID actualLobbyID = CSteamID.Nil;
-        public CSteamID ownerID = CSteamID.Nil;
-        public string ownerName;
-        
-        public int maxLobbyMembers = 8;
+        public string JoinLobbyID = string.Empty;
+        public CSteamID ActualLobbyID = CSteamID.Nil;
+        public int MaxLobbyMembers = 8;
+        public string OwnerName;
         public bool isPauseMenu;
         public bool isInGame;
         public bool isGameLoaded;
@@ -79,9 +85,8 @@ namespace PoPM
 
         // idfk why making dummy vars assigns for the callback but it somehow makes the callbacks be called
         private Callback<LobbyEnter_t> _lobbyEntered;
-        private Callback<LobbyChatUpdate_t> _lobbyChatUpdate;
 
-        public GameObject mainMenu;
+        public GameObject MainMenu;
 
         private void Awake()
         {
@@ -91,7 +96,6 @@ namespace PoPM
         private void Start()
         {
             _lobbyEntered = Callback<LobbyEnter_t>.Create(OnLobbyEnter);
-            _lobbyChatUpdate = Callback<LobbyChatUpdate_t>.Create(OnLobbyChatUpdate);
         }
 
         private void Update()
@@ -107,12 +111,12 @@ namespace PoPM
 
         public List<string> GetLobbyMembers()
         {
-            int len = SteamMatchmaking.GetNumLobbyMembers(actualLobbyID);
+            int len = SteamMatchmaking.GetNumLobbyMembers(ActualLobbyID);
             var ret = new List<string>(len);
 
             for (int i = 0; i < len; i++)
             {
-                var member = SteamMatchmaking.GetLobbyMemberByIndex(actualLobbyID, i);
+                var member = SteamMatchmaking.GetLobbyMemberByIndex(ActualLobbyID, i);
                 ret.Add(SteamFriends.GetFriendPersonaName(new CSteamID(member.m_SteamID)));
             }
 
@@ -160,7 +164,7 @@ namespace PoPM
                         {
                             if (!inLobby)
                             {
-                                SteamMatchmaking.CreateLobby(ELobbyType.k_ELobbyTypePrivate, maxLobbyMembers);
+                                SteamMatchmaking.CreateLobby(ELobbyType.k_ELobbyTypePrivate, MaxLobbyMembers);
 
                                 inLobby = true;
                                 isLobbyOwner = true;
@@ -176,11 +180,11 @@ namespace PoPM
 
                             GUILayout.BeginHorizontal();
                             GUILayout.FlexibleSpace();
-                            GUILayout.Label($"Lobby ID: {actualLobbyID.GetAccountID()}");
+                            GUILayout.Label($"Lobby ID: {ActualLobbyID.GetAccountID()}");
 
                             if (GUILayout.Button("Copy ID"))
                             {
-                                GUIUtility.systemCopyBuffer = actualLobbyID.GetAccountID().ToString();
+                                GUIUtility.systemCopyBuffer = ActualLobbyID.GetAccountID().ToString();
                             }
 
                             GUILayout.FlexibleSpace();
@@ -190,7 +194,7 @@ namespace PoPM
 
                             if (GUILayout.Button("<color=#ed0e0e>EXIT</color>"))
                             {
-                                ExitLobby(); //TODO: Getting a NullReferenceException here
+                                ExitLobby();
                                 GUIStack.Pop();
                             }
 
@@ -199,9 +203,9 @@ namespace PoPM
                             GUILayout.Label($"PLAYERS");
                             GUILayout.FlexibleSpace();
                             GUILayout.EndHorizontal();
-                            
+
                             GUILayout.Space(5f);
-                            
+
                             foreach (string member in GetLobbyMembers().ToArray())
                             {
                                 GUILayout.Label(member);
@@ -218,13 +222,13 @@ namespace PoPM
 
                             GUILayout.Space(15f);
 
-                            joinLobbyID = GUILayout.TextField(joinLobbyID);
+                            JoinLobbyID = GUILayout.TextField(JoinLobbyID);
 
                             GUILayout.Space(5f);
 
                             if (GUILayout.Button("JOIN"))
                             {
-                                if (uint.TryParse(joinLobbyID, out uint idLong))
+                                if (uint.TryParse(JoinLobbyID, out uint idLong))
                                 {
                                     CSteamID lobbyId = new CSteamID(new AccountID_t(idLong), (uint)EChatSteamIDInstanceFlags.k_EChatInstanceFlagLobby | (uint)EChatSteamIDInstanceFlags.k_EChatInstanceFlagMMSLobby, EUniverse.k_EUniversePublic, EAccountType.k_EAccountTypeChat);
                                     SteamMatchmaking.JoinLobby(lobbyId);
@@ -232,10 +236,13 @@ namespace PoPM
                                 inLobby = true;
                                 isLobbyOwner = false;
                                 GUIStack.Push("Guest");
+
+                                
                             }
 
                             if (GUILayout.Button("<color=#888888>BACK</color>"))
                             {
+                                ExitLobby();
                                 GUIStack.Pop();
                             }
 
@@ -244,7 +251,7 @@ namespace PoPM
                     case "Guest":
                         GUILayout.BeginHorizontal();
                         GUILayout.FlexibleSpace();
-                        GUILayout.Label($"{ownerName} Lobby");
+                        GUILayout.Label($"{OwnerName} Lobby");
                         GUILayout.FlexibleSpace();
                         GUILayout.EndHorizontal();
 
@@ -253,7 +260,7 @@ namespace PoPM
                             ExitLobby();
                             GUIStack.Pop();
                         }
-                        
+
                         GUILayout.BeginHorizontal();
                         GUILayout.FlexibleSpace();
                         GUILayout.Label($"PLAYERS");
@@ -266,7 +273,7 @@ namespace PoPM
                         {
                             GUILayout.Label(member);
                         }
-                        
+
                         break;
                 }
                 GUILayout.EndVertical();
@@ -276,64 +283,37 @@ namespace PoPM
 
         public void ExitLobby()
         {
-            if (GUIStack.Peek() == "Guest" || GUIStack.Peek() == "Host")
-            {
-                GUIStack.Pop();
-            }
-
             inLobby = false;
             isLobbyOwner = false;
 
-            Plugin.Logger.LogInfo($"Leaving lobby! {actualLobbyID.GetAccountID()}");
-            SteamMatchmaking.LeaveLobby(actualLobbyID);
+            Plugin.Logger.LogInfo($"Leaving lobby! {ActualLobbyID.GetAccountID()}");
+            SteamMatchmaking.LeaveLobby(ActualLobbyID);
 
-            //TODO: Getting NullReference Exception when restarting/exiting game
-            //mainMenu.transform.GetChild(0).GetComponent<Image>().enabled = true;
-            //mainMenu.transform.GetChild(0).GetComponent<Button>().enabled = true;
-            //mainMenu.transform.GetChild(0).GetComponentInChildren<TextMesh>().color = new Color(1, 1, 1, 1);
+            MainMenu.transform.GetChild(0).GetComponent<Image>().enabled = true;
+            MainMenu.transform.GetChild(0).GetComponent<Button>().enabled = true;
+            MainMenu.transform.GetChild(0).GetComponentInChildren<TextMeshProUGUI>().color = new Color(1, 1, 1, 1);
 
-            ownerName = string.Empty;
-            actualLobbyID = CSteamID.Nil;
+            OwnerName = string.Empty;
+            ActualLobbyID = CSteamID.Nil;
         }
 
         public void OnLobbyCreated(LobbyCreated_t pCallback)
         {
-            actualLobbyID = new CSteamID(pCallback.m_ulSteamIDLobby);
-            Plugin.Logger.LogInfo($"Created lobby! {actualLobbyID.GetAccountID()}");
+            ActualLobbyID = new CSteamID(pCallback.m_ulSteamIDLobby);
+            Plugin.Logger.LogInfo($"Created lobby! {ActualLobbyID.GetAccountID()}");
         }
 
         public void OnLobbyEnter(LobbyEnter_t pCallback)
         {
-            actualLobbyID = new CSteamID(pCallback.m_ulSteamIDLobby);
-            Plugin.Logger.LogInfo($"Joined lobby! {actualLobbyID.GetAccountID()}");
+            ActualLobbyID = new CSteamID(pCallback.m_ulSteamIDLobby);
+            Plugin.Logger.LogInfo($"Joined lobby! {ActualLobbyID.GetAccountID()}");
 
-            ownerID = SteamMatchmaking.GetLobbyOwner(actualLobbyID);
-            ownerName = SteamFriends.GetFriendPersonaName(ownerID);
-            
-            Plugin.Logger.LogInfo($"Host Name: {ownerName}");
+            OwnerName = SteamFriends.GetFriendPersonaName(SteamMatchmaking.GetLobbyOwner(ActualLobbyID));
+            Plugin.Logger.LogInfo($"Host ID: {OwnerName}");
 
-            if (!isLobbyOwner)
-            {
-                //TODO: apparently color wont change at all
-                //mainMenu.transform.GetChild(0).GetComponent<Image>().enabled = false;
-                //mainMenu.transform.GetChild(0).GetComponent<Button>().enabled = false;
-                //mainMenu.transform.GetChild(0).GetComponentInChildren<TextMesh>().color = new Color(0.5f, 0.5f, 0.5f, 1f);
-            }
-        }
-
-        private void OnLobbyChatUpdate(LobbyChatUpdate_t pCallback)
-        {
-            // Anything other than a join...
-            if ((pCallback.m_rgfChatMemberStateChange & (uint)EChatMemberStateChange.k_EChatMemberStateChangeEntered) ==  0)
-            {
-                var id = new CSteamID(pCallback.m_ulSteamIDUserChanged);
-
-                // ...means the owner left.
-                if (ownerID == id)
-                {
-                   ExitLobby();
-                }
-            }
+            MainMenu.transform.GetChild(0).GetComponent<Image>().enabled = false;
+            MainMenu.transform.GetChild(0).GetComponent<Button>().enabled = false;
+            MainMenu.transform.GetChild(0).GetComponentInChildren<TextMeshProUGUI>().color = new Color(1, 1, 1, 0.2f);
         }
     }
 }
