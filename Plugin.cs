@@ -25,7 +25,7 @@ public class Plugin : BaseUnityPlugin
 
     private void OnApplicationQuit()
     {
-        LobbySystem.instance.ExitLobby();
+        LobbySystem.Instance.ExitLobby();
     }
 
     private void Awake()
@@ -57,6 +57,9 @@ public class Plugin : BaseUnityPlugin
             var lobbyObject = new GameObject();
             lobbyObject.AddComponent<LobbySystem>();
             DontDestroyOnLoad(lobbyObject);
+
+            var netObject = new GameObject();
+            netObject.AddComponent<IngameNetManager>();
         }
     }
 }

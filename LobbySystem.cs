@@ -13,12 +13,12 @@ namespace PoPM
     {
         static void Prefix()
         {
-            LobbySystem.instance.mainMenu = GameObject.Find("Menu/Canvas/mainMenu/VerticalGroup/");
+            LobbySystem.Instance.mainMenu = GameObject.Find("Menu/Canvas/mainMenu/VerticalGroup/"); //TODO: Returning null for some reason
 
-            if (!LobbySystem.instance.isPauseMenu)
+            if (!LobbySystem.Instance.isPauseMenu)
             {
-                LobbySystem.instance.isInGame = false;
-                LobbySystem.instance.isGameLoaded = true;
+                LobbySystem.Instance.isInGame = false;
+                LobbySystem.Instance.isGameLoaded = true;
             }
         }
     }
@@ -29,7 +29,7 @@ namespace PoPM
     {
         static void Prefix()
         {
-            LobbySystem.instance.isPauseMenu = true;
+            LobbySystem.Instance.isPauseMenu = true;
         }
     }
 
@@ -39,8 +39,8 @@ namespace PoPM
     {
         static void Prefix()
         {
-            LobbySystem.instance.isPauseMenu = false;
-            LobbySystem.instance.isInGame = true;
+            LobbySystem.Instance.isPauseMenu = false;
+            LobbySystem.Instance.isInGame = true;
         }
     }
 
@@ -50,13 +50,13 @@ namespace PoPM
     {
         static void Prefix()
         {
-            if (LobbySystem.instance != null)
+            if (LobbySystem.Instance != null)
             {
-                LobbySystem.instance.isPauseMenu = false;
-                LobbySystem.instance.isInGame = false;
-                LobbySystem.instance.isGameLoaded = false;
+                LobbySystem.Instance.isPauseMenu = false;
+                LobbySystem.Instance.isInGame = false;
+                LobbySystem.Instance.isGameLoaded = false;
 
-                LobbySystem.instance.ExitLobby();
+                LobbySystem.Instance.ExitLobby();
             }
         }
     }
@@ -64,14 +64,17 @@ namespace PoPM
 
     public class LobbySystem : MonoBehaviour
     {
-        public static LobbySystem instance;
+        public static LobbySystem Instance;
+        
         public Stack<string> GUIStack = new();
+        
         public string joinLobbyID = string.Empty;
         public CSteamID actualLobbyID = CSteamID.Nil;
         public CSteamID ownerID = CSteamID.Nil;
         public string ownerName;
 
         public int maxLobbyMembers = 8;
+        
         public bool isPauseMenu;
         public bool isInGame;
         public bool isGameLoaded;
@@ -86,7 +89,7 @@ namespace PoPM
 
         private void Awake()
         {
-            instance = this;
+            Instance = this;
         }
 
         private void Start()
