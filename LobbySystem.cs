@@ -49,11 +49,14 @@ namespace PoPM
     {
         static void Prefix()
         {
-            LobbySystem.instance.isPauseMenu = false;
-            LobbySystem.instance.isInGame = false;
-            LobbySystem.instance.isGameLoaded = false;
+            if (LobbySystem.instance != null)
+            {
+                LobbySystem.instance.isPauseMenu = false;
+                LobbySystem.instance.isInGame = false;
+                LobbySystem.instance.isGameLoaded = false;
             
-            LobbySystem.instance.ExitLobby();
+                LobbySystem.instance.ExitLobby();
+            }
         }
     }
 
@@ -64,8 +67,10 @@ namespace PoPM
         public Stack<string> GUIStack = new();
         public string joinLobbyID = string.Empty;
         public CSteamID actualLobbyID = CSteamID.Nil;
-        public int maxLobbyMembers = 8;
+        public CSteamID ownerID = CSteamID.Nil;
         public string ownerName;
+        
+        public int maxLobbyMembers = 8;
         public bool isPauseMenu;
         public bool isInGame;
         public bool isGameLoaded;
@@ -74,6 +79,7 @@ namespace PoPM
 
         // idfk why making dummy vars assigns for the callback but it somehow makes the callbacks be called
         private Callback<LobbyEnter_t> _lobbyEntered;
+        private Callback<LobbyChatUpdate_t> _lobbyChatUpdate;
 
         public GameObject mainMenu;
 
@@ -85,6 +91,7 @@ namespace PoPM
         private void Start()
         {
             _lobbyEntered = Callback<LobbyEnter_t>.Create(OnLobbyEnter);
+            _lobbyChatUpdate = Callback<LobbyChatUpdate_t>.Create(OnLobbyChatUpdate);
         }
 
         private void Update()
@@ -267,18 +274,23 @@ namespace PoPM
             }
         }
 
-        // ReSharper disable Unity.PerformanceAnalysis
         public void ExitLobby()
         {
+            if (GUIStack.Peek() == "Guest" || GUIStack.Peek() == "Host")
+            {
+                GUIStack.Pop();
+            }
+
             inLobby = false;
             isLobbyOwner = false;
 
             Plugin.Logger.LogInfo($"Leaving lobby! {actualLobbyID.GetAccountID()}");
             SteamMatchmaking.LeaveLobby(actualLobbyID);
 
-            mainMenu.transform.GetChild(0).GetComponent<Image>().enabled = true;
-            mainMenu.transform.GetChild(0).GetComponent<Button>().enabled = true;
-            mainMenu.transform.GetChild(0).GetComponentInChildren<TextMesh>().color = new Color(1, 1, 1, 1);
+            //TODO: Getting NullReference Exception when restarting/exiting game
+            //mainMenu.transform.GetChild(0).GetComponent<Image>().enabled = true;
+            //mainMenu.transform.GetChild(0).GetComponent<Button>().enabled = true;
+            //mainMenu.transform.GetChild(0).GetComponentInChildren<TextMesh>().color = new Color(1, 1, 1, 1);
 
             ownerName = string.Empty;
             actualLobbyID = CSteamID.Nil;
@@ -295,14 +307,32 @@ namespace PoPM
             actualLobbyID = new CSteamID(pCallback.m_ulSteamIDLobby);
             Plugin.Logger.LogInfo($"Joined lobby! {actualLobbyID.GetAccountID()}");
 
-            ownerName = SteamFriends.GetFriendPersonaName(SteamMatchmaking.GetLobbyOwner(actualLobbyID));
+            ownerID = SteamMatchmaking.GetLobbyOwner(actualLobbyID);
+            ownerName = SteamFriends.GetFriendPersonaName(ownerID);
+            
             Plugin.Logger.LogInfo($"Host Name: {ownerName}");
 
             if (!isLobbyOwner)
             {
-                mainMenu.transform.GetChild(0).GetComponent<Image>().enabled = false;
-                mainMenu.transform.GetChild(0).GetComponent<Button>().enabled = false;
-                mainMenu.transform.GetChild(0).GetComponentInChildren<TextMesh>().color = new Color(0.5f, 0.5f, 0.5f, 1f); //TODO: apparently color wont change
+                //TODO: apparently color wont change at all
+                //mainMenu.transform.GetChild(0).GetComponent<Image>().enabled = false;
+                //mainMenu.transform.GetChild(0).GetComponent<Button>().enabled = false;
+                //mainMenu.transform.GetChild(0).GetComponentInChildren<TextMesh>().color = new Color(0.5f, 0.5f, 0.5f, 1f);
+            }
+        }
+
+        private void OnLobbyChatUpdate(LobbyChatUpdate_t pCallback)
+        {
+            // Anything other than a join...
+            if ((pCallback.m_rgfChatMemberStateChange & (uint)EChatMemberStateChange.k_EChatMemberStateChangeEntered) ==  0)
+            {
+                var id = new CSteamID(pCallback.m_ulSteamIDUserChanged);
+
+                // ...means the owner left.
+                if (ownerID == id)
+                {
+                   ExitLobby();
+                }
             }
         }
     }
