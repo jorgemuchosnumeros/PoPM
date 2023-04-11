@@ -25,7 +25,7 @@
       <Private>False</Private>
     </Reference>
     <Reference Include="Assembly-CSharp-firstpass">
-      <HintPath>Assembly-CSharp-firstpass.dll</HintPath>
+      <HintPath>libs\Assembly-CSharp-firstpass.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="netstandard">
@@ -37,7 +37,7 @@
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.TextMeshPro">
-      <HintPath>Unity.TextMeshPro.dll</HintPath>
+      <HintPath>libs\Unity.TextMeshPro.dll</HintPath>
       <Private>False</Private>
     </Reference>
   </ItemGroup>
