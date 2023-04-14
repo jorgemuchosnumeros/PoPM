@@ -7,7 +7,9 @@ using UnityEngine.UI;
 
 namespace PoPM
 {
-    // Called every time in menu
+    /// <summary>
+    /// Setting some flags for lobby logic 
+    /// </summary>
     [HarmonyPatch(typeof(MainMenu), "Initialize")]
     public class MainMenuInitializePatch
     {
@@ -22,8 +24,7 @@ namespace PoPM
             }
         }
     }
-
-    // Called every time in menu except after splash
+    
     [HarmonyPatch(typeof(MainMenu), "ChangeToPauseMenu")]
     public class MainMenuChangeToPauseMenuPatch
     {
@@ -32,8 +33,7 @@ namespace PoPM
             LobbySystem.Instance.isPauseMenu = true;
         }
     }
-
-    // Called when playing 
+    
     [HarmonyPatch(typeof(MainMenu), "Play")]
     public class MainMenuPlayPatch
     {
@@ -43,12 +43,11 @@ namespace PoPM
             LobbySystem.Instance.isInGame = true;
         }
     }
-
-    // Called when restarting
+    
     [HarmonyPatch(typeof(MainMenu), "Restart")]
     public class MainMenuRestartPatch
     {
-        static void Prefix()
+        static void Postfix()
         {
             LobbySystem.Instance.isPauseMenu = false;
             LobbySystem.Instance.isInGame = false;
