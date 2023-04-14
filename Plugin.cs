@@ -7,15 +7,6 @@ using Steamworks;
 
 namespace PoPM;
 
-[HarmonyPatch(typeof(FadeController), "FadeOut")]
-public class FadeControllerFadeOutPatch
-{
-    static void Prefix()
-    {
-        // Do stuff after scene loads
-    }
-}
-
 [BepInPlugin(PluginInfo.PLUGIN_GUID, PluginInfo.PLUGIN_NAME, PluginInfo.PLUGIN_VERSION)]
 public class Plugin : BaseUnityPlugin
 {
