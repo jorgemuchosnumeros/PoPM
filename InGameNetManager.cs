@@ -1,42 +1,326 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.IO;
+using System.IO.Compression;
+using System.Linq;
 using System.Reflection;
+using HarmonyLib;
+using PoPM.utils;
 using Steamworks;
 using UnityEngine;
 
-namespace PoPM;
-
-public class IngameNetManager : MonoBehaviour
+namespace PoPM
 {
-    public static IngameNetManager Instance;
-    
-    public List<HSteamNetConnection> serverConnections = new List<HSteamNetConnection>();
-    
-    /// Server owned
-    public HSteamNetPollGroup PollGroup;
-    /// Server owned
-    
-    private Callback<SteamNetConnectionStatusChangedCallback_t> _steamNetConnectionStatusChangedCallback;
-
-    private void Awake()
+    /// <summary>
+    /// Shut down the connection if we leave the match.
+    /// </summary>
+    [HarmonyPatch(typeof(MainMenu), "Restart")]
+    public class OnExitGamePatch
     {
-        Instance = this;
-    }
-    
-    private void Start()
-    {
-        SteamNetworkingUtils.InitRelayNetworkAccess();
-
-        _steamNetConnectionStatusChangedCallback = Callback<SteamNetConnectionStatusChangedCallback_t>.Create(OnConnectionStatus);
-    }
-
-    private void OnConnectionStatus(SteamNetConnectionStatusChangedCallback_t pCallback)
-    {
-        var info = pCallback.m_info;
-
-        if (info.m_hListenSocket != HSteamListenSocket.Invalid)
+        static void Postfix()
         {
-            switch (info.m_eState)
+            if (!IngameNetManager.Instance.isClient)
+                return;
+
+            SteamNetworkingSockets.CloseConnection(IngameNetManager.Instance.c2SConnection, 0, string.Empty, false);
+
+            if (IngameNetManager.Instance.isHost)
+                SteamNetworkingSockets.CloseListenSocket(IngameNetManager.Instance.serverSocket);
+
+            IngameNetManager.Instance.ResetState();
+        }
+    }
+    
+    public class IngameNetManager : MonoBehaviour
+    {
+        public static IngameNetManager Instance;
+        
+        public float _ticker2 = 0f;
+        public int _pps = 0;
+        public int _total = 0;
+        public int _ppsOut = 0;
+        public int _totalOut = 0;
+        public int _bytesOut = 0;
+        public int _totalBytesOut = 0;
+        
+        public bool _showSpecificOutbound;
+        public Dictionary<PacketType, int> _savedBytesOuts = new();
+        public Dictionary<PacketType, int> _specificBytesOut = new();
+        
+        public Guid OwnGUID = Guid.NewGuid();
+
+        public SteamNetConnectionRealTimeStatus_t _realtimeStatus;
+        private SteamNetConnectionRealTimeLaneStatus_t _pLanes;
+        private int _nLanes = 1;
+        
+
+        public TimedAction MainSendTick = new TimedAction(1.0f / 10);
+
+        public List<HSteamNetConnection> serverConnections = new(); //TODO serverConnections Logic
+
+        public HSteamNetConnection c2SConnection; //TODO define
+        
+        /// Server owned
+        public HSteamListenSocket serverSocket; //TODO define
+        
+        public HSteamNetPollGroup pollGroup; //TODO pollGroup Logic
+        
+        public List<HSteamNetConnection> ServerConnections = new();
+
+        /// Server owned
+
+        public bool isHost; //TODO define
+        
+        public bool isClient; //TODO define
+        
+        private Callback<SteamNetConnectionStatusChangedCallback_t> _steamNetConnectionStatusChangedCallback;
+        
+        private void Awake()
+        {
+            Instance = this;
+        }
+
+        private void Start()
+        {
+            SteamNetworkingUtils.InitRelayNetworkAccess();
+
+            _steamNetConnectionStatusChangedCallback =
+                Callback<SteamNetConnectionStatusChangedCallback_t>.Create(OnConnectionStatus);
+        }
+        
+        private void LateUpdate()
+        {
+            if (!isClient)
+                return;
+
+            Time.timeScale = 1f;
+            Time.fixedDeltaTime = Time.timeScale / 60f;
+        }
+
+        private void Update()
+        {
+            if (Input.GetKeyDown(KeyCode.F7))
+                _showSpecificOutbound = !_showSpecificOutbound;
+            
+            _ticker2 += Time.deltaTime;
+            
+            if (_ticker2 > 1)
+            {
+                _ticker2 = 0;
+
+                _pps = _total;
+                _total = 0;
+
+                _ppsOut = _totalOut;
+                _totalOut = 0;
+
+                _bytesOut = _totalBytesOut;
+                _totalBytesOut = 0;
+
+                _savedBytesOuts = _specificBytesOut.ToDictionary(entry => entry.Key, entry => entry.Value);
+                _specificBytesOut.Clear();
+            }
+        }
+
+        private void OnGUI()
+        {
+            if (!isClient)
+                return;
+            
+            GUI.Label(new Rect(10, 30, 200, 40), $"Inbound: {_pps} PPS");
+            GUI.Label(new Rect(10, 50, 200, 40), $"Outbound: {_ppsOut} PPS -- {_bytesOut} Bytes");
+
+            SteamNetworkingSockets.GetConnectionRealTimeStatus(c2SConnection, ref _realtimeStatus, _nLanes, ref _pLanes);
+            GUI.Label(new Rect(10, 80, 200, 40), $"Ping: {_realtimeStatus.m_nPing} ms");
+            
+            if (_showSpecificOutbound)
+            {
+                var ordered = _savedBytesOuts.OrderBy(x => -x.Value).ToDictionary(x => x.Key, x => x.Value);
+                int i = 0;
+                foreach (var kv in ordered)
+                {
+                    GUI.Label(new Rect(10, 110 + i * 30, 200, 40), $"{kv.Key} - {kv.Value}B");
+                    i++;
+                }
+            }
+        }
+        
+        public void ResetState()
+        {
+            
+            _ticker2 = 0f;
+            _pps = 0;
+            _total = 0;
+            _ppsOut = 0;
+            _totalOut = 0;
+            _bytesOut = 0;
+            _totalBytesOut = 0;
+
+            /*
+            MainSendTick.Start();
+
+            ActorStateCache.Clear();
+            */
+            
+            isHost = false;
+
+            isClient = false;
+        }
+        
+        public void OpenRelay()
+        {
+            Plugin.Logger.LogInfo("Starting server socket for connections.");
+
+            ServerConnections.Clear();
+            serverSocket = SteamNetworkingSockets.CreateListenSocketP2P(0, 0, null);
+
+            pollGroup = SteamNetworkingSockets.CreatePollGroup();
+
+            isHost = true;
+        }
+        
+        public void StartAsServer()
+        {
+            Plugin.Logger.LogInfo("Starting server and client.");
+
+            isHost = true;
+
+            isClient = true;
+
+            //TODO: Add guids to Actors
+            /*
+            foreach (var actor in FindObjectsOfType<Actor>())
+            {
+                int id = actor.aiControlled ? BotIdGen++ : RandomGen.Next(13337, int.MaxValue);
+
+                actor.gameObject.AddComponent<GuidComponent>().guid = id;
+
+                ClientActors.Add(id, actor);
+                OwnedActors.Add(id);
+            }
+            */
+
+            var iden = new SteamNetworkingIdentity
+            {
+                m_eType = ESteamNetworkingIdentityType.k_ESteamNetworkingIdentityType_SteamID,
+            };
+
+            iden.SetSteamID(SteamUser.GetSteamID());
+
+            c2SConnection = SteamNetworkingSockets.ConnectP2P(ref iden, 0, 0, null);
+        }
+        
+        public void StartAsClient(CSteamID host)
+        {
+            Plugin.Logger.LogInfo("Starting client.");
+
+            isClient = true;
+
+            //TODO: Add guids to Actors
+            /*
+            var player = ActorManager.instance.player;
+            {
+                int id = RandomGen.Next(13337, int.MaxValue);
+
+                player.gameObject.AddComponent<GuidComponent>().guid = id;
+
+                ClientActors.Add(id, player);
+                OwnedActors.Add(id);
+            }
+            */
+
+            var iden = new SteamNetworkingIdentity
+            {
+                m_eType = ESteamNetworkingIdentityType.k_ESteamNetworkingIdentityType_SteamID,
+            };
+
+            iden.SetSteamID(host);
+
+            StartCoroutine(RepeatTryConnect(iden));
+        }
+        
+        IEnumerator RepeatTryConnect(SteamNetworkingIdentity iden)
+        {
+            for (int i = 0; i < 30; i++)
+            {
+                Plugin.Logger.LogInfo($"Attempting connection... {i + 1}/30");
+
+                // Set the initial connection timeout to 2 minutes, for slow hosts.
+                SteamNetworkingConfigValue_t timeout = new SteamNetworkingConfigValue_t
+                {
+                    m_eValue = ESteamNetworkingConfigValue.k_ESteamNetworkingConfig_TimeoutInitial,
+                    m_eDataType = ESteamNetworkingConfigDataType.k_ESteamNetworkingConfig_Int32,
+                    m_val = new SteamNetworkingConfigValue_t.OptionValue { m_int32 = 2 * 60 * 1000 },
+                };
+
+                c2SConnection = SteamNetworkingSockets.ConnectP2P(ref iden, 0, 1, new SteamNetworkingConfigValue_t[] { timeout });
+
+                if (c2SConnection != HSteamNetConnection.Invalid)
+                    yield break;
+
+                yield return new WaitForSeconds(0.5f);
+            }
+
+            //MainMenu.Restart();
+            typeof(MainMenu).GetMethod("Restart", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(FindObjectOfType<MainMenu>(), new object[] { });
+        }
+
+        public void SendPacketToServer(byte[] data, PacketType type, int send_flags)
+        {
+            _totalOut++;
+
+            using MemoryStream compressOut = new MemoryStream();
+            using (DeflateStream deflateStream = new DeflateStream(compressOut, System.IO.Compression.CompressionLevel.Optimal))
+            {
+                deflateStream.Write(data, 0, data.Length);
+            }
+            byte[] compressed = compressOut.ToArray();
+
+            using MemoryStream packetStream = new MemoryStream();
+            Packet packet = new Packet
+            {
+                Id = type,
+                Sender = OwnGUID,
+                Data = compressed
+            };
+
+            // TODO: Write Stream Protocol
+            /*using (var writer = new ProtocolWriter(packetStream))
+            {
+                writer.Write(packet);
+            }
+            */
+            
+            byte[] packet_data = packetStream.ToArray();
+
+            _totalBytesOut += packet_data.Length;
+
+            if (_specificBytesOut.ContainsKey(type))
+                _specificBytesOut[type] += packet_data.Length;
+            else
+                _specificBytesOut[type] = packet_data.Length;
+
+            // This is safe. We are only pinning the array.
+            unsafe
+            {
+                fixed (byte* p_msg = packet_data)
+                {
+                    var res = SteamNetworkingSockets.SendMessageToConnection(c2SConnection, (IntPtr)p_msg, (uint)packet_data.Length, send_flags, out long num);
+                    if (res != EResult.k_EResultOK)
+                        Plugin.Logger.LogError($"Packet failed to send: {res}");
+                }
+            }
+        }
+
+        
+        private void OnConnectionStatus(SteamNetConnectionStatusChangedCallback_t pCallback)
+        {
+            var info = pCallback.m_info;
+
+            if (info.m_hListenSocket != HSteamListenSocket.Invalid)
+            {
+                switch (info.m_eState)
                 {
                     case ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_Connecting:
                         Plugin.Logger.LogInfo($"Connection request from: {info.m_identityRemote.GetSteamID()}");
@@ -67,7 +351,7 @@ public class IngameNetManager : MonoBehaviour
 
                         serverConnections.Add(pCallback.m_hConn);
 
-                        SteamNetworkingSockets.SetConnectionPollGroup(pCallback.m_hConn, PollGroup);
+                        SteamNetworkingSockets.SetConnectionPollGroup(pCallback.m_hConn, pollGroup);
 
                         // Unsafe just for the ptr to int.
                         // We are increasing the send buffer size for each connection.
@@ -75,11 +359,14 @@ public class IngameNetManager : MonoBehaviour
                         {
                             int _2mb = 2097152;
 
-                            SteamNetworkingUtils.SetConfigValue(ESteamNetworkingConfigValue.k_ESteamNetworkingConfig_SendBufferSize,
+                            SteamNetworkingUtils.SetConfigValue(
+                                ESteamNetworkingConfigValue.k_ESteamNetworkingConfig_SendBufferSize,
                                 ESteamNetworkingConfigScope.k_ESteamNetworkingConfig_Connection,
-                                (IntPtr)pCallback.m_hConn.m_HSteamNetConnection, ESteamNetworkingConfigDataType.k_ESteamNetworkingConfig_Int32,
+                                (IntPtr)pCallback.m_hConn.m_HSteamNetConnection,
+                                ESteamNetworkingConfigDataType.k_ESteamNetworkingConfig_Int32,
                                 (IntPtr)(&_2mb));
                         }
+
                         Plugin.Logger.LogInfo("Accepted the connection");
                         break;
 
@@ -88,26 +375,27 @@ public class IngameNetManager : MonoBehaviour
                         Plugin.Logger.LogInfo($"Killing connection from {info.m_identityRemote.GetSteamID()}.");
                         SteamNetworkingSockets.CloseConnection(pCallback.m_hConn, 0, null, false);
                         //TODO: Clear NetActors (?)
-                        
+
                         break;
                 }
-        }
-        else
-        {
-            switch (info.m_eState)
+            }
+            else
             {
-                case ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_Connected:
-                    Plugin.Logger.LogInfo("Connected to server.");
-                    break;
+                switch (info.m_eState)
+                {
+                    case ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_Connected:
+                        Plugin.Logger.LogInfo("Connected to server.");
+                        break;
 
-                case ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_ClosedByPeer:
-                case ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_ProblemDetectedLocally:
-                    Plugin.Logger.LogInfo($"Killing connection from {info.m_identityRemote.GetSteamID()}.");
-                    SteamNetworkingSockets.CloseConnection(pCallback.m_hConn, 0, null, false);
+                    case ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_ClosedByPeer:
+                    case ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_ProblemDetectedLocally:
+                        Plugin.Logger.LogInfo($"Killing connection from {info.m_identityRemote.GetSteamID()}.");
+                        SteamNetworkingSockets.CloseConnection(pCallback.m_hConn, 0, null, false);
 
-                    //MainMenu.Restart();
-                    typeof(MainMenu).GetMethod("Restart", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(FindObjectOfType<MainMenu>(), new object[] {});
-                    break;
+                        //MainMenu.Restart();
+                        typeof(MainMenu).GetMethod("Restart", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(FindObjectOfType<MainMenu>(), new object[] { });
+                        break;
+                }
             }
         }
     }
