@@ -50,14 +50,11 @@ namespace PoPM
     {
         static void Prefix()
         {
-            if (LobbySystem.Instance != null)
-            {
-                LobbySystem.Instance.isPauseMenu = false;
-                LobbySystem.Instance.isInGame = false;
-                LobbySystem.Instance.isGameLoaded = false;
-
-                LobbySystem.Instance.ExitLobby();
-            }
+            LobbySystem.Instance.isPauseMenu = false;
+            LobbySystem.Instance.isInGame = false;
+            LobbySystem.Instance.isGameLoaded = false;
+            
+            LobbySystem.Instance.ExitLobby();
         }
     }
 
@@ -280,6 +277,9 @@ namespace PoPM
 
         public void ExitLobby()
         {
+            if(!inLobby)
+                return;
+            
             if (GUIStack.Peek() == "Guest" || GUIStack.Peek() == "Host")
             {
                 GUIStack.Pop();
