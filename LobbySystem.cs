@@ -79,7 +79,7 @@ namespace PoPM
         public bool isLobbyOwner;
 
         // idfk why making dummy vars assigns for the callback but it somehow makes the callbacks be called
-        private Callback<LobbyEnter_t> _lobbyEntered;
+        private Callback<LobbyEnter_t> _lobbyEnter;
         private Callback<LobbyChatUpdate_t> _lobbyChatUpdate;
 
         public GameObject mainMenu;
@@ -91,7 +91,7 @@ namespace PoPM
 
         private void Start()
         {
-            _lobbyEntered = Callback<LobbyEnter_t>.Create(OnLobbyEnter);
+            _lobbyEnter = Callback<LobbyEnter_t>.Create(OnLobbyEnter);
             _lobbyChatUpdate = Callback<LobbyChatUpdate_t>.Create(OnLobbyChatUpdate);
         }
 
