@@ -5,8 +5,8 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using HarmonyLib;
-using PoPM.utils;
 using Steamworks;
 using UnityEngine;
 
@@ -15,6 +15,7 @@ namespace PoPM
     /// <summary>
     /// Shut down the connection if we leave the match.
     /// </summary>
+    // TODO: Edit "Restart" text in Pause menu to "Restart (Exit Lobby)"
     [HarmonyPatch(typeof(MainMenu), "Restart")]
     public class OnExitGamePatch
     {
@@ -57,22 +58,24 @@ namespace PoPM
 
         public TimedAction MainSendTick = new TimedAction(1.0f / 10);
 
-        public List<HSteamNetConnection> serverConnections = new(); //TODO serverConnections Logic
+        public List<HSteamNetConnection> serverConnections = new();
 
-        public HSteamNetConnection c2SConnection; //TODO define
+        public HSteamNetConnection c2SConnection;
         
         /// Server owned
-        public HSteamListenSocket serverSocket; //TODO define
+        public HSteamListenSocket serverSocket;
         
-        public HSteamNetPollGroup pollGroup; //TODO pollGroup Logic
+        public HSteamNetPollGroup pollGroup;
         
         public List<HSteamNetConnection> ServerConnections = new();
 
         /// Server owned
 
-        public bool isHost; //TODO define
+        private static readonly int PACKET_SLACK = 256;
         
-        public bool isClient; //TODO define
+        public bool isHost;
+        
+        public bool isClient;
         
         private Callback<SteamNetConnectionStatusChangedCallback_t> _steamNetConnectionStatusChangedCallback;
         
@@ -157,11 +160,8 @@ namespace PoPM
             _bytesOut = 0;
             _totalBytesOut = 0;
 
-            /*
+            
             MainSendTick.Start();
-
-            ActorStateCache.Clear();
-            */
             
             isHost = false;
 
@@ -280,18 +280,16 @@ namespace PoPM
             using MemoryStream packetStream = new MemoryStream();
             Packet packet = new Packet
             {
-                Id = type,
+                ID = type,
                 Sender = OwnGUID,
                 Data = compressed
             };
-
-            // TODO: Write Stream Protocol
-            /*using (var writer = new ProtocolWriter(packetStream))
+            
+            using (var writer = new ProtocolWriter(packetStream))
             {
                 writer.Write(packet);
             }
-            */
-            
+
             byte[] packet_data = packetStream.ToArray();
 
             _totalBytesOut += packet_data.Length;
@@ -312,7 +310,6 @@ namespace PoPM
                 }
             }
         }
-
         
         private void OnConnectionStatus(SteamNetConnectionStatusChangedCallback_t pCallback)
         {
@@ -396,6 +393,91 @@ namespace PoPM
                         typeof(MainMenu).GetMethod("Restart", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(FindObjectOfType<MainMenu>(), new object[] { });
                         break;
                 }
+            }
+        }
+
+        private void FixedUpdate()
+        {
+            if (!isClient)
+                return;
+            
+            SteamNetworkingSockets.RunCallbacks();
+
+            if (isClient)
+            {
+                var msg_ptr = new IntPtr[PACKET_SLACK];
+                int msg_count = SteamNetworkingSockets.ReceiveMessagesOnConnection(c2SConnection, msg_ptr, PACKET_SLACK);
+
+                for (int msg_index = 0; msg_index < msg_count; msg_index++)
+                {
+                    var msg = Marshal.PtrToStructure<SteamNetworkingMessage_t>(msg_ptr[msg_index]);
+
+                    var msg_data = new byte[msg.m_cbSize];
+                    Marshal.Copy(msg.m_pData, msg_data, 0, msg.m_cbSize);
+
+                    using var memStream = new MemoryStream(msg_data);
+                    using var packetReader = new ProtocolReader(memStream);
+
+                    var packet = packetReader.ReadPacket();
+
+                    if (packet.Sender != OwnGUID)
+                    {
+                        _total++;
+
+                        using MemoryStream compressedStream = new MemoryStream(packet.Data);
+                        using DeflateStream decompressStream = new DeflateStream(compressedStream, CompressionMode.Decompress);
+                        using var dataStream = new ProtocolReader(decompressStream);
+
+                        switch (packet.ID)
+                        {
+                            case PacketType.ActorUpdate:
+                            {
+                                var bulkActorPacket = dataStream.ReadBulkActorUpdate();
+                                //TODO: Perform NetActor Logic
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (isHost)
+            {
+                var msg_ptr = new IntPtr[PACKET_SLACK];
+                int msg_count = SteamNetworkingSockets.ReceiveMessagesOnPollGroup(pollGroup, msg_ptr, PACKET_SLACK);
+
+                for (int msg_index = 0; msg_index < msg_count; msg_index++)
+                {
+                    var msg = Marshal.PtrToStructure<SteamNetworkingMessage_t>(msg_ptr[msg_index]);
+
+                    for (int i = ServerConnections.Count - 1; i >= 0; i--)
+                    {
+                        var connection = ServerConnections[i];
+
+                        if (connection == msg.m_conn)
+                            continue;
+
+                        var res = SteamNetworkingSockets.SendMessageToConnection(connection, msg.m_pData, (uint)msg.m_cbSize, Constants.k_nSteamNetworkingSend_Reliable, out long msg_num);
+
+                        if (res != EResult.k_EResultOK)
+                        {
+                            Plugin.Logger.LogError($"Failure {res}");
+                            ServerConnections.RemoveAt(i);
+                            SteamNetworkingSockets.CloseConnection(connection, 0, null, false);
+                        }
+                    }
+
+                    Marshal.DestroyStructure<SteamNetworkingMessage_t>(msg_ptr[msg_index]);
+                }
+            }
+            
+            if (MainSendTick.TrueDone())
+            {
+                MainSendTick.Start();
+
+                //SendActorStates();
+
+                //SendGameState();
             }
         }
     }
