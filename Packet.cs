@@ -7,7 +7,7 @@ namespace PoPM
     /// </summary>
     public class Packet
     {
-        public PacketType Id;
+        public PacketType ID;
 
         public Guid Sender;
 

@@ -35,12 +35,28 @@ namespace PoPM
     }
     
     [HarmonyPatch(typeof(MainMenu), "Play")]
-    public class MainMenuPlayPatch
+    public class OnStartPlayPatch
     {
         static void Prefix()
         {
+            if (LobbySystem.Instance.inLobby && !LobbySystem.Instance.isLobbyOwner)
+                return;
+
+            if (LobbySystem.Instance.isLobbyOwner)
+            {
+                IngameNetManager.Instance.OpenRelay();
+            }
+
             LobbySystem.Instance.isPauseMenu = false;
             LobbySystem.Instance.isInGame = true;
+        }
+
+        static void Postfix()
+        {
+            if (LobbySystem.Instance.isLobbyOwner)
+                IngameNetManager.Instance.StartAsServer();
+            else
+                IngameNetManager.Instance.StartAsClient(LobbySystem.Instance.ownerID); 
         }
     }
     

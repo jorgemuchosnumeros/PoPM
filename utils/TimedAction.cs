@@ -1,30 +1,34 @@
-namespace PoPM.utils
+using System;
+using System.Timers;
+
+namespace PoPM
 {
-    public struct TimedAction
+    public class TimedAction
     {
         private float lifetime;
-        private float end;
-        private bool unscaledTime;
-        private bool lied;
+        private bool done;
+        private Timer aTimer;
 
-        public extern TimedAction(float lifetime, bool unscaledTime = false);
+        public TimedAction(float lifetime)
+        {
+            this.lifetime = lifetime;
+        }
+        
+        public void Start()
+        {
+            done = false;
+            aTimer = new Timer(lifetime * 1000);
+            aTimer.Elapsed += OnTimedEvent;
+        }
 
-        public extern void Start();
-
-        public extern void StartLifetime(float lifetime);
-
-        public extern void Stop();
-
-        public extern float Remaining();
-
-        public extern float Elapsed();
-
-        public extern float Ratio();
-
-        public extern bool TrueDone();
-
-        private extern float GetTime();
-
-        public extern bool Done();
+        private void OnTimedEvent(Object source, ElapsedEventArgs e)
+        {
+            done = true;
+        }
+        
+        public bool TrueDone()
+        {
+            return done;
+        }
     }
 }

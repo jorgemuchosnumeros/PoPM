@@ -45,4 +45,7 @@
       <Private>False</Private>
     </Reference>
   </ItemGroup>
+  <ItemGroup>
+    <Folder Include="utils" />
+  </ItemGroup>
 </Project>
