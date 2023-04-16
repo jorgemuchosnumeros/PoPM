@@ -57,9 +57,7 @@ namespace PoPM
         
 
         public TimedAction MainSendTick = new TimedAction(1.0f / 10);
-
-        public List<HSteamNetConnection> serverConnections = new();
-
+        
         public HSteamNetConnection c2SConnection;
         
         /// Server owned
@@ -67,7 +65,7 @@ namespace PoPM
         
         public HSteamNetPollGroup pollGroup;
         
-        public List<HSteamNetConnection> ServerConnections = new();
+        public List<HSteamNetConnection> serverConnections = new();
 
         /// Server owned
 
@@ -103,7 +101,7 @@ namespace PoPM
 
         private void Update()
         {
-            if (Input.GetKeyDown(KeyCode.F7))
+            if (Input.GetKeyDown(KeyCode.F8))
                 _showSpecificOutbound = !_showSpecificOutbound;
             
             _ticker2 += Time.deltaTime;
@@ -172,7 +170,7 @@ namespace PoPM
         {
             Plugin.Logger.LogInfo("Starting server socket for connections.");
 
-            ServerConnections.Clear();
+            serverConnections.Clear();
             serverSocket = SteamNetworkingSockets.CreateListenSocketP2P(0, 0, null);
 
             pollGroup = SteamNetworkingSockets.CreatePollGroup();
@@ -236,7 +234,7 @@ namespace PoPM
             };
 
             iden.SetSteamID(host);
-
+            
             StartCoroutine(RepeatTryConnect(iden));
         }
         
@@ -325,7 +323,7 @@ namespace PoPM
                         bool inLobby = false;
                         foreach (var memberId in LobbySystem.Instance.GetLobbyMembers())
                         {
-                            if (info.m_identityRemote.GetSteamID().ToString() == memberId)
+                            if (info.m_identityRemote.GetSteamID() == memberId)
                             {
                                 inLobby = true;
                                 break;
@@ -407,7 +405,7 @@ namespace PoPM
             {
                 var msg_ptr = new IntPtr[PACKET_SLACK];
                 int msg_count = SteamNetworkingSockets.ReceiveMessagesOnConnection(c2SConnection, msg_ptr, PACKET_SLACK);
-
+                
                 for (int msg_index = 0; msg_index < msg_count; msg_index++)
                 {
                     var msg = Marshal.PtrToStructure<SteamNetworkingMessage_t>(msg_ptr[msg_index]);
@@ -432,7 +430,13 @@ namespace PoPM
                         {
                             case PacketType.ActorUpdate:
                             {
-                                var bulkActorPacket = dataStream.ReadBulkActorUpdate();
+                                /// RECEIVE TEST PACKET
+                                var testPacket = dataStream.ReadActorPacket();
+                                var senderName = testPacket.Name;
+
+                                Plugin.Logger.LogInfo($"Receiving test packet from: {senderName}");
+                                /// RECEIVE TEST PACKET
+                                
                                 //TODO: Perform NetActor Logic
                                 break;
                             }
@@ -450,9 +454,9 @@ namespace PoPM
                 {
                     var msg = Marshal.PtrToStructure<SteamNetworkingMessage_t>(msg_ptr[msg_index]);
 
-                    for (int i = ServerConnections.Count - 1; i >= 0; i--)
+                    for (int i = serverConnections.Count - 1; i >= 0; i--)
                     {
-                        var connection = ServerConnections[i];
+                        var connection = serverConnections[i];
 
                         if (connection == msg.m_conn)
                             continue;
@@ -462,7 +466,7 @@ namespace PoPM
                         if (res != EResult.k_EResultOK)
                         {
                             Plugin.Logger.LogError($"Failure {res}");
-                            ServerConnections.RemoveAt(i);
+                            serverConnections.RemoveAt(i);
                             SteamNetworkingSockets.CloseConnection(connection, 0, null, false);
                         }
                     }
