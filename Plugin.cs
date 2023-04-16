@@ -51,6 +51,7 @@ public class Plugin : BaseUnityPlugin
 
             var netObject = new GameObject();
             netObject.AddComponent<IngameNetManager>();
+            DontDestroyOnLoad(netObject);
         }
     }
 }

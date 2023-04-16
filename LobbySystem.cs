@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
 using HarmonyLib;
 using Steamworks;
 using TMPro;
@@ -16,6 +18,7 @@ namespace PoPM
         static void Prefix()
         {
             LobbySystem.Instance.mainMenu = GameObject.Find("Menu/Canvas/MainMenu/VerticalGroup/");
+            SteamMatchmaking.SetLobbyData(LobbySystem.Instance.actualLobbyID, "started", "false");
 
             if (!LobbySystem.Instance.isPauseMenu)
             {
@@ -41,22 +44,26 @@ namespace PoPM
         {
             if (LobbySystem.Instance.inLobby && !LobbySystem.Instance.isLobbyOwner)
                 return;
-
-            if (LobbySystem.Instance.isLobbyOwner)
-            {
-                IngameNetManager.Instance.OpenRelay();
-            }
-
+            
             LobbySystem.Instance.isPauseMenu = false;
-            LobbySystem.Instance.isInGame = true;
+            
         }
 
         static void Postfix()
         {
+            if (!LobbySystem.Instance.inLobby)
+                return;
+            
             if (LobbySystem.Instance.isLobbyOwner)
+            {
+                IngameNetManager.Instance.OpenRelay();
                 IngameNetManager.Instance.StartAsServer();
-            else
-                IngameNetManager.Instance.StartAsClient(LobbySystem.Instance.ownerID); 
+                SteamMatchmaking.SetLobbyData(LobbySystem.Instance.actualLobbyID, "started", "yes");
+            }
+             else
+                IngameNetManager.Instance.StartAsClient(LobbySystem.Instance.ownerID);
+
+            LobbySystem.Instance.isInGame = true;
         }
     }
     
@@ -119,17 +126,46 @@ namespace PoPM
                 else
                     GUIStack.Clear();
             }
+
+            if (SteamMatchmaking.GetLobbyData(actualLobbyID, "started") == "yes" && !isLobbyOwner && !isInGame)
+            {
+                isInGame = true;
+                FindObjectOfType<MainMenu>().Play(true);
+            }
+        
+        /// SEND TEST PACKET
+        if (Input.GetKeyDown(KeyCode.P) && IngameNetManager.Instance.isClient)
+            {
+                string SteamName = SteamFriends.GetPersonaName();
+                using MemoryStream memoryStream = new MemoryStream();
+
+                var testPacket = new ActorPacket
+                {
+                    Name = SteamName
+                };
+                
+                using (var writer = new ProtocolWriter(memoryStream))
+                {
+                    writer.Write(testPacket);
+                }
+                
+                byte[] data = memoryStream.ToArray();
+                IngameNetManager.Instance.SendPacketToServer(data, PacketType.ActorUpdate, Constants.k_nSteamNetworkingSend_Reliable);
+                
+                Plugin.Logger.LogInfo($"Sending test packet from {SteamName}");
+            }
+            /// SEND TEST PACKET
         }
 
-        public List<string> GetLobbyMembers()
+        public List<CSteamID> GetLobbyMembers()
         {
             int len = SteamMatchmaking.GetNumLobbyMembers(actualLobbyID);
-            var ret = new List<string>(len);
+            var ret = new List<CSteamID>(len);
 
             for (int i = 0; i < len; i++)
             {
                 var member = SteamMatchmaking.GetLobbyMemberByIndex(actualLobbyID, i);
-                ret.Add(SteamFriends.GetFriendPersonaName(new CSteamID(member.m_SteamID)));
+                ret.Add(member);
             }
 
             return ret;
@@ -218,10 +254,12 @@ namespace PoPM
 
                             GUILayout.Space(5f);
 
-                            foreach (string member in GetLobbyMembers().ToArray())
+                            foreach (CSteamID member in GetLobbyMembers().ToArray())
                             {
-                                GUILayout.Label(member);
+                                var memberName = SteamFriends.GetFriendPersonaName(new CSteamID(member.m_SteamID));
+                                GUILayout.Label(memberName);
                             }
+                            
                             break;
                         }
                     case "Join":
@@ -278,9 +316,10 @@ namespace PoPM
 
                         GUILayout.Space(5f);
 
-                        foreach (string member in GetLobbyMembers().ToArray())
+                        foreach (CSteamID member in GetLobbyMembers().ToArray())
                         {
-                            GUILayout.Label(member);
+                            var memberName = SteamFriends.GetFriendPersonaName(new CSteamID(member.m_SteamID));
+                            GUILayout.Label(memberName);
                         }
 
                         break;
@@ -328,6 +367,7 @@ namespace PoPM
             ownerID = SteamMatchmaking.GetLobbyOwner(actualLobbyID);
             ownerName = SteamFriends.GetFriendPersonaName(ownerID);
 
+            Plugin.Logger.LogInfo($"Host ID: {ownerID}");
             Plugin.Logger.LogInfo($"Host Name: {ownerName}");
 
             if (!isLobbyOwner)
