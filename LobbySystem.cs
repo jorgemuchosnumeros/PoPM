@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using System.IO;
-using System.Reflection;
 using HarmonyLib;
 using Steamworks;
 using TMPro;
@@ -42,16 +41,15 @@ namespace PoPM
     {
         static void Prefix()
         {
-            if (LobbySystem.Instance.inLobby && !LobbySystem.Instance.isLobbyOwner)
+            if (LobbySystem.Instance.isInLobby && !LobbySystem.Instance.isLobbyOwner)
                 return;
             
             LobbySystem.Instance.isPauseMenu = false;
-            
         }
 
         static void Postfix()
         {
-            if (!LobbySystem.Instance.inLobby)
+            if (!LobbySystem.Instance.isInLobby)
                 return;
             
             if (LobbySystem.Instance.isLobbyOwner)
@@ -60,9 +58,10 @@ namespace PoPM
                 IngameNetManager.Instance.StartAsServer();
                 SteamMatchmaking.SetLobbyData(LobbySystem.Instance.actualLobbyID, "started", "yes");
             }
-             else
+            else
                 IngameNetManager.Instance.StartAsClient(LobbySystem.Instance.ownerID);
 
+            NetVillager.GetOwnTransform();
             LobbySystem.Instance.isInGame = true;
         }
     }
@@ -97,7 +96,7 @@ namespace PoPM
         public bool isPauseMenu;
         public bool isInGame;
         public bool isGameLoaded;
-        public bool inLobby;
+        public bool isInLobby;
         public bool isLobbyOwner;
 
         // idfk why making dummy vars assigns for the callback but it somehow makes the callbacks be called
@@ -119,7 +118,7 @@ namespace PoPM
 
         private void Update()
         {
-            if (Input.GetKeyDown(KeyCode.M) && !inLobby)
+            if (Input.GetKeyDown(KeyCode.M) && !isInLobby)
             {
                 if (GUIStack.Count == 0)
                     GUIStack.Push("Main");
@@ -132,29 +131,6 @@ namespace PoPM
                 isInGame = true;
                 FindObjectOfType<MainMenu>().Play(true);
             }
-        
-        /// SEND TEST PACKET
-        if (Input.GetKeyDown(KeyCode.P) && IngameNetManager.Instance.isClient)
-            {
-                string SteamName = SteamFriends.GetPersonaName();
-                using MemoryStream memoryStream = new MemoryStream();
-
-                var testPacket = new ActorPacket
-                {
-                    Name = SteamName
-                };
-                
-                using (var writer = new ProtocolWriter(memoryStream))
-                {
-                    writer.Write(testPacket);
-                }
-                
-                byte[] data = memoryStream.ToArray();
-                IngameNetManager.Instance.SendPacketToServer(data, PacketType.ActorUpdate, Constants.k_nSteamNetworkingSend_Reliable);
-                
-                Plugin.Logger.LogInfo($"Sending test packet from {SteamName}");
-            }
-            /// SEND TEST PACKET
         }
 
         public List<CSteamID> GetLobbyMembers()
@@ -210,11 +186,11 @@ namespace PoPM
                         }
                     case "Host":
                         {
-                            if (!inLobby)
+                            if (!isInLobby)
                             {
                                 SteamMatchmaking.CreateLobby(ELobbyType.k_ELobbyTypePrivate, maxLobbyMembers);
 
-                                inLobby = true;
+                                isInLobby = true;
                                 isLobbyOwner = true;
                             }
 
@@ -242,7 +218,6 @@ namespace PoPM
 
                             if (GUILayout.Button("<color=#ed0e0e>EXIT</color>"))
                             {
-                                ExitLobby(); //TODO: Getting a NullReferenceException here
                                 GUIStack.Pop();
                             }
 
@@ -283,7 +258,7 @@ namespace PoPM
                                     CSteamID lobbyId = new CSteamID(new AccountID_t(idLong), (uint)EChatSteamIDInstanceFlags.k_EChatInstanceFlagLobby | (uint)EChatSteamIDInstanceFlags.k_EChatInstanceFlagMMSLobby, EUniverse.k_EUniversePublic, EAccountType.k_EAccountTypeChat);
                                     SteamMatchmaking.JoinLobby(lobbyId);
                                 }
-                                inLobby = true;
+                                isInLobby = true;
                                 isLobbyOwner = false;
                                 GUIStack.Push("Guest");
                             }
@@ -331,7 +306,7 @@ namespace PoPM
 
         public void ExitLobby()
         {
-            if(!inLobby)
+            if(!isInLobby)
                 return;
             
             if (GUIStack.Peek() == "Guest" || GUIStack.Peek() == "Host")
@@ -339,7 +314,7 @@ namespace PoPM
                 GUIStack.Pop();
             }
 
-            inLobby = false;
+            isInLobby = false;
             isLobbyOwner = false;
 
             Plugin.Logger.LogInfo($"Leaving lobby! {actualLobbyID.GetAccountID()}");

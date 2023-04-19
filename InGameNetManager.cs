@@ -185,20 +185,7 @@ namespace PoPM
             isHost = true;
 
             isClient = true;
-
-            //TODO: Add guids to Actors
-            /*
-            foreach (var actor in FindObjectsOfType<Actor>())
-            {
-                int id = actor.aiControlled ? BotIdGen++ : RandomGen.Next(13337, int.MaxValue);
-
-                actor.gameObject.AddComponent<GuidComponent>().guid = id;
-
-                ClientActors.Add(id, actor);
-                OwnedActors.Add(id);
-            }
-            */
-
+            
             var iden = new SteamNetworkingIdentity
             {
                 m_eType = ESteamNetworkingIdentityType.k_ESteamNetworkingIdentityType_SteamID,
@@ -214,19 +201,6 @@ namespace PoPM
             Plugin.Logger.LogInfo("Starting client.");
 
             isClient = true;
-
-            //TODO: Add guids to Actors
-            /*
-            var player = ActorManager.instance.player;
-            {
-                int id = RandomGen.Next(13337, int.MaxValue);
-
-                player.gameObject.AddComponent<GuidComponent>().guid = id;
-
-                ClientActors.Add(id, player);
-                OwnedActors.Add(id);
-            }
-            */
 
             var iden = new SteamNetworkingIdentity
             {
@@ -260,8 +234,7 @@ namespace PoPM
                 yield return new WaitForSeconds(0.5f);
             }
 
-            //MainMenu.Restart();
-            typeof(MainMenu).GetMethod("Restart", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(FindObjectOfType<MainMenu>(), new object[] { });
+            //TODO: Abandon when connection attempt unsuccessful
         }
 
         public void SendPacketToServer(byte[] data, PacketType type, int send_flags)
@@ -430,14 +403,9 @@ namespace PoPM
                         {
                             case PacketType.ActorUpdate:
                             {
-                                /// RECEIVE TEST PACKET
-                                var testPacket = dataStream.ReadActorPacket();
-                                var senderName = testPacket.Name;
-
-                                Plugin.Logger.LogInfo($"Receiving test packet from: {senderName}");
-                                /// RECEIVE TEST PACKET
+                                var actorPacket = dataStream.ReadActorPacket();
+                                NetVillager.RegisterClientTransform(actorPacket);
                                 
-                                //TODO: Perform NetActor Logic
                                 break;
                             }
                         }
