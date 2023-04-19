@@ -147,15 +147,6 @@ namespace PoPM
             Write(value.FacingDirection);
         }
 
-        public void Write(BulkActorUpdate value)
-        {
-            Write(value.Updates.Count);
-            foreach (var update in value.Updates)
-            {
-                Write(update);
-            }
-        }
-        
         public void Write(Packet value)
         {
             Write((int)value.ID);
@@ -321,21 +312,7 @@ namespace PoPM
                 FacingDirection = ReadVector3(),
             };
         }
-        
-        public BulkActorUpdate ReadBulkActorUpdate()
-        {
-            int count = ReadInt32();
-            var updates = new List<ActorPacket>(count);
-            for (int i = 0; i < count; i++)
-            {
-                updates.Add(ReadActorPacket());
-            }
-            return new BulkActorUpdate
-            {
-                Updates = updates,
-            };
-        }
-        
+
         public Packet ReadPacket()
         {
             return new Packet

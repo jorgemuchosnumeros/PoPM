@@ -16,9 +16,4 @@ namespace PoPM
 
         public Vector3 FacingDirection;
     }
-    
-    public class BulkActorUpdate
-    {
-        public List<ActorPacket> Updates;
-    }
 }
