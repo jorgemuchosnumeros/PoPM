@@ -9,7 +9,7 @@ namespace PoPM
     /// since the one is currently using doesnt support the steam relay services.
     /// </summary>
 
-    //TODO: Get the new Steamworks.NET running without breaking the  Steam Overlay and/or the Achievements
+    //TODO: Get the new Steamworks.NET running without breaking the Steam Overlay and/or the Achievements
     
     [HarmonyPatch(typeof(SteamManager), "Awake")]
     public class SteamManagerAwakePatch

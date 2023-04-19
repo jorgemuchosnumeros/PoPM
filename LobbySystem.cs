@@ -49,7 +49,7 @@ namespace PoPM
 
         static void Postfix()
         {
-            if (!LobbySystem.Instance.isInLobby)
+            if (!LobbySystem.Instance.isInLobby || IngameNetManager.Instance.isClient)
                 return;
             
             if (LobbySystem.Instance.isLobbyOwner)
