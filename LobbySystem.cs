@@ -116,6 +116,7 @@ namespace PoPM
             _lobbyChatUpdate = Callback<LobbyChatUpdate_t>.Create(OnLobbyChatUpdate);
         }
 
+        private TimedAction delayPlay = new TimedAction(1f);
         private void Update()
         {
             if (Input.GetKeyDown(KeyCode.M) && !isInLobby)
@@ -128,7 +129,12 @@ namespace PoPM
 
             if (SteamMatchmaking.GetLobbyData(actualLobbyID, "started") == "yes" && !isLobbyOwner && !isInGame)
             {
+                delayPlay.Start();
                 isInGame = true;
+            }
+            
+            if (delayPlay.TrueDone()) // If we dont delay the joining, the host can only see one client at the time
+            {
                 FindObjectOfType<MainMenu>().Play(true);
             }
         }

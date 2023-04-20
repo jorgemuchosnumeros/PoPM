@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using Steamworks;
@@ -46,7 +47,7 @@ namespace PoPM
                 netVillager.Value.transform.position = (netVillager.Value.transform.position - NetVillagerTargets[netVillager.Key].transform.position).magnitude > 5
                     ? NetVillagerTargets[netVillager.Key].transform.position
                     : Vector3.Lerp(netVillager.Value.transform.position, NetVillagerTargets[netVillager.Key].transform.position, 10f * Time.deltaTime);
-                    
+
                 netVillager.Value.transform.rotation = Quaternion.Slerp(netVillager.Value.transform.rotation, NetVillagerTargets[netVillager.Key].transform.rotation, 5f * Time.deltaTime);
             }
         }
@@ -65,18 +66,19 @@ namespace PoPM
                 Plugin.Logger.LogInfo($"New Villager (Player) instantiated with name: {actorPacket.Name} id: {actorPacket.ID}");
                 
                 NetVillagerTargets.Add(actorPacket.ID, new GameObject());
-                NetVillagers.Add(actorPacket.ID, Instantiate(_defaultVillager));
+                
+                GameObject villager = Instantiate<GameObject>(_defaultVillager) as GameObject;
+                NetVillagers.Add(actorPacket.ID, villager);
             }
-
             
-            foreach (var Target in NetVillagerTargets)
+            foreach (var target in NetVillagerTargets)
             {
-                if (NetVillagerTargets.ContainsKey(actorPacket.ID))
+                if (target.Key == actorPacket.ID)
                 {
-                    Target.Value.transform.position = actorPacket.Position - new Vector3(0, 1.6f, 0); // To ground offset;
+                    target.Value.transform.position = actorPacket.Position - new Vector3(0, 1.6f, 0); // To ground offset;
 
-                    var eulerAngles = Target.Value.transform.eulerAngles;
-                    Target.Value.transform.rotation = Quaternion.Euler(eulerAngles.x, actorPacket.FacingDirection.y, eulerAngles.z);
+                    var eulerAngles = target.Value.transform.eulerAngles;
+                    target.Value.transform.rotation = Quaternion.Euler(eulerAngles.x, actorPacket.FacingDirection.y, eulerAngles.z);
                 }
             }
         }
