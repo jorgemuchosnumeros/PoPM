@@ -154,6 +154,13 @@ namespace PoPM
             Write(value.Data.Length);
             Write(value.Data);
         }
+        
+        public void Write(GameStatePacket value)
+        {
+            Write(value.ID);
+            Write(value.Name);
+            Write(value.EruptionTrigger);
+        }
     }
 
     public class ProtocolReader : BinaryReader
@@ -312,7 +319,16 @@ namespace PoPM
                 FacingDirection = ReadVector3(),
             };
         }
-
+        
+        public GameStatePacket ReadGameStatePacket()
+        {
+            return new GameStatePacket
+            {
+                ID = ReadInt32(),
+                Name = ReadString(),
+                EruptionTrigger = ReadBoolean(),
+            };
+        }
         public Packet ReadPacket()
         {
             return new Packet
