@@ -77,6 +77,8 @@ namespace PoPM
         
         private Callback<SteamNetConnectionStatusChangedCallback_t> _steamNetConnectionStatusChangedCallback;
         
+        private bool _startFlowFlag;
+        
         private void Awake()
         {
             Instance = this;
@@ -407,6 +409,19 @@ namespace PoPM
                                 
                                 NetVillager.RegisterClientTransform(actorPacket);
                                 
+                                break;
+                            }
+
+                            case PacketType.GameStateUpdate:
+                            {
+                                var gameStatePacket = dataStream.ReadGameStatePacket();
+
+                                if (gameStatePacket.EruptionTrigger && !_startFlowFlag)
+                                {
+                                    FindObjectOfType<Scr_LavaController>().StartLavaFlow();
+                                    _startFlowFlag = true;
+                                }
+
                                 break;
                             }
                         }

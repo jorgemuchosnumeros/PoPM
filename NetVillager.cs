@@ -1,19 +1,42 @@
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using HarmonyLib;
 using Steamworks;
 using UnityEngine;
 using Random = System.Random;
 
 namespace PoPM
 {
+    [HarmonyPatch(typeof(Scr_LavaController), "StartLavaFlow")]
+    public static class SendLavaFlowEventPatch
+    {
+        static void Prefix()
+        {
+            using MemoryStream memoryStream = new MemoryStream();
+            var testPacket = new GameStatePacket()
+            {
+                Name = NetVillager.steamName,
+                ID = NetVillager.id,
+                EruptionTrigger = true,
+            };
+            using (var writer = new ProtocolWriter(memoryStream))
+            {
+                writer.Write(testPacket);
+            }
+
+            byte[] data = memoryStream.ToArray();
+
+            IngameNetManager.Instance.SendPacketToServer(data, PacketType.GameStateUpdate, Constants.k_nSteamNetworkingSend_Reliable);
+        }
+    }
+
     public class NetVillager: MonoBehaviour
     {
         public Transform fpsTransform;
         private Quaternion _rotation;
         private Vector3 _position;
-        private string _steamName;
-        private int _id;
+        public static string steamName;
+        public static int id;
         
         public static Dictionary<int, GameObject> NetVillagerTargets = new();
         public static Dictionary<int, GameObject> NetVillagers = new();
@@ -29,8 +52,8 @@ namespace PoPM
             _mainSendTick.Start();
             _defaultVillager = GameObject.Find("Starting area/Villagers/Villager (3)");
 
-            _id = _randomGen.Next(13337, int.MaxValue);
-            _steamName = SteamFriends.GetPersonaName();
+            id = _randomGen.Next(13337, int.MaxValue);
+            steamName = SteamFriends.GetPersonaName();
         }
         
         private void Update()
@@ -97,8 +120,8 @@ namespace PoPM
             using MemoryStream memoryStream = new MemoryStream();
             var testPacket = new ActorPacket
             {
-                Name = _steamName,
-                ID = _id,
+                Name = steamName,
+                ID = id,
                 Position = fpsTransform.position,
                 FacingDirection = fpsTransform.eulerAngles,
             };
@@ -109,7 +132,7 @@ namespace PoPM
 
             byte[] data = memoryStream.ToArray();
 
-            IngameNetManager.Instance.SendPacketToServer(data, PacketType.ActorUpdate, Constants.k_nSteamNetworkingSend_Reliable);
+            IngameNetManager.Instance.SendPacketToServer(data, PacketType.ActorUpdate, Constants.k_nSteamNetworkingSend_Unreliable);
         }
     }    
 }
