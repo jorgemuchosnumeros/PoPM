@@ -404,6 +404,7 @@ namespace PoPM
                             case PacketType.ActorUpdate:
                             {
                                 var actorPacket = dataStream.ReadActorPacket();
+                                
                                 NetVillager.RegisterClientTransform(actorPacket);
                                 
                                 break;
@@ -441,15 +442,6 @@ namespace PoPM
 
                     Marshal.DestroyStructure<SteamNetworkingMessage_t>(msg_ptr[msg_index]);
                 }
-            }
-            
-            if (MainSendTick.TrueDone())
-            {
-                MainSendTick.Start();
-
-                //SendActorStates();
-
-                //SendGameState();
             }
         }
     }
