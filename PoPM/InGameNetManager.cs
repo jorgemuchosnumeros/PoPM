@@ -454,7 +454,6 @@ namespace PoPM
                             SteamNetworkingSockets.CloseConnection(connection, 0, null, false);
                         }
                     }
-
                     Marshal.DestroyStructure<SteamNetworkingMessage_t>(msg_ptr[msg_index]);
                 }
             }

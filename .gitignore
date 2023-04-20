@@ -1,5 +1,6 @@
-libs/
-obj/
-bin/
-.idea/
-Folder.DotSettings.user
+PoPM/libs/
+PoPM/obj/
+PoPM/bin/
+PoPM/Folder.DotSettings.user
+.stfolder
+.idea
