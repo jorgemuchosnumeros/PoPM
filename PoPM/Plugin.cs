@@ -5,54 +5,54 @@ using HarmonyLib;
 using UnityEngine;
 using Steamworks;
 
-namespace PoPM;
-
-[BepInPlugin(PluginInfo.PLUGIN_GUID, PluginInfo.PLUGIN_NAME, PluginInfo.PLUGIN_VERSION)]
-public class Plugin : BaseUnityPlugin
+namespace PoPM
 {
-    public new static BepInEx.Logging.ManualLogSource Logger = null;
-    
-    public bool firstSteamworksInit;
-
-    private void OnApplicationQuit()
+    [BepInPlugin(PluginInfo.PLUGIN_GUID, PluginInfo.PLUGIN_NAME, PluginInfo.PLUGIN_VERSION)]
+    public class Plugin : BaseUnityPlugin
     {
-        LobbySystem.Instance.ExitLobby();
-    }
+        public new static BepInEx.Logging.ManualLogSource Logger = null;
 
-    private void Awake()
-    {
-        Logger = base.Logger;
-        
-        Logger.LogInfo($"Plugin {PluginInfo.PLUGIN_GUID} is loaded!");
-        
-        new Harmony("patch.popm").PatchAll();
-    }
+        public bool firstSteamworksInit;
 
-    public static string BuildGUID => Assembly.GetExecutingAssembly().ManifestModule.ModuleVersionId.ToString();
-
-    private void OnGUI()
-    {
-        GUI.Label(new Rect(10, Screen.height - 20, 400, 40), $"PoPM ID: {BuildGUID}");
-    }
-
-    void Update()
-    {
-        if (!SteamManager.Initialized)
-            return;
-
-        SteamAPI.RunCallbacks();
-        if (!firstSteamworksInit)
+        private void OnApplicationQuit()
         {
-            firstSteamworksInit = true;
-            
-            var lobbyObject = new GameObject();
-            lobbyObject.AddComponent<LobbySystem>();
-            DontDestroyOnLoad(lobbyObject);
+            LobbySystem.Instance.ExitLobby();
+        }
 
-            var netObject = new GameObject();
-            netObject.AddComponent<IngameNetManager>();
-            DontDestroyOnLoad(netObject);
+        private void Awake()
+        {
+            Logger = base.Logger;
+
+            Logger.LogInfo($"Plugin {PluginInfo.PLUGIN_GUID} is loaded!");
+
+            new Harmony("patch.popm").PatchAll();
+        }
+
+        public static string BuildGUID => Assembly.GetExecutingAssembly().ManifestModule.ModuleVersionId.ToString();
+
+        private void OnGUI()
+        {
+            GUI.Label(new Rect(10, Screen.height - 20, 400, 40), $"PoPM ID: {BuildGUID}");
+        }
+
+        void Update()
+        {
+            if (!SteamManager.Initialized)
+                return;
+
+            SteamAPI.RunCallbacks();
+            if (!firstSteamworksInit)
+            {
+                firstSteamworksInit = true;
+
+                var lobbyObject = new GameObject();
+                lobbyObject.AddComponent<LobbySystem>();
+                DontDestroyOnLoad(lobbyObject);
+
+                var netObject = new GameObject();
+                netObject.AddComponent<IngameNetManager>();
+                DontDestroyOnLoad(netObject);
+            }
         }
     }
 }
-
