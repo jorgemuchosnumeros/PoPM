@@ -90,7 +90,8 @@ namespace PoPM
             _position = fpsTransform.position;
             _rotation = fpsTransform.rotation;
 
-            if (_position == prevPosition && _rotation == prevRotation) // If we dont move, dont bother on sending the position again
+            // If we dont move or we are paused, dont bother on sending the position
+            if ((_position == prevPosition && _rotation == prevRotation) || LobbySystem.Instance.isPauseMenu) 
                 return;
 
             using MemoryStream memoryStream = new MemoryStream();
