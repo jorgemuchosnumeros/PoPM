@@ -90,7 +90,10 @@ namespace PoPM
                 
                 NetVillagerTargets.Add(actorPacket.ID, new GameObject());
                 
-                GameObject villager = Instantiate<GameObject>(_defaultVillager) as GameObject;
+                GameObject villager = Instantiate(_defaultVillager);
+                
+                //villager.AddComponent<UI.NameTag>().GetComponent<UI.NameTag>().name = actorPacket.Name;
+                
                 NetVillagers.Add(actorPacket.ID, villager);
             }
             
