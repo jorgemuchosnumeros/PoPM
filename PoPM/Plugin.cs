@@ -1,9 +1,8 @@
-﻿using System.Net.NetworkInformation;
-using System.Reflection;
+﻿using System.Reflection;
 using BepInEx;
 using HarmonyLib;
-using UnityEngine;
 using Steamworks;
+using UnityEngine;
 
 namespace PoPM
 {
@@ -14,10 +13,7 @@ namespace PoPM
 
         public bool firstSteamworksInit;
 
-        private void OnApplicationQuit()
-        {
-            LobbySystem.Instance.ExitLobby();
-        }
+        public static string BuildGUID => Assembly.GetExecutingAssembly().ManifestModule.ModuleVersionId.ToString();
 
         private void Awake()
         {
@@ -26,13 +22,6 @@ namespace PoPM
             Logger.LogInfo($"Plugin {PluginInfo.PLUGIN_GUID} is loaded!");
 
             new Harmony("patch.popm").PatchAll();
-        }
-
-        public static string BuildGUID => Assembly.GetExecutingAssembly().ManifestModule.ModuleVersionId.ToString();
-
-        private void OnGUI()
-        {
-            GUI.Label(new Rect(10, Screen.height - 20, 400, 40), $"PoPM ID: {BuildGUID}");
         }
 
         void Update()
@@ -45,6 +34,9 @@ namespace PoPM
             {
                 firstSteamworksInit = true;
 
+                StartCoroutine(NameTag.LoadAssetBundle(Assembly.GetExecutingAssembly()
+                    .GetManifestResourceStream("PoPM.assets.nametag")));
+
                 var lobbyObject = new GameObject();
                 lobbyObject.AddComponent<LobbySystem>();
                 DontDestroyOnLoad(lobbyObject);
@@ -53,6 +45,16 @@ namespace PoPM
                 netObject.AddComponent<IngameNetManager>();
                 DontDestroyOnLoad(netObject);
             }
+        }
+
+        private void OnGUI()
+        {
+            GUI.Label(new Rect(10, Screen.height - 20, 400, 40), $"PoPM ID: {BuildGUID}");
+        }
+
+        private void OnApplicationQuit()
+        {
+            LobbySystem.Instance.ExitLobby();
         }
     }
 }
