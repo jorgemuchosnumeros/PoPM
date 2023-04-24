@@ -13,7 +13,7 @@ namespace PoPM
         static void Prefix()
         {
             using MemoryStream memoryStream = new MemoryStream();
-            var testPacket = new GameStatePacket()
+            var gameStatePacket = new GameStatePacket()
             {
                 Name = NetVillager.steamName,
                 ID = NetVillager.id,
@@ -21,57 +21,69 @@ namespace PoPM
             };
             using (var writer = new ProtocolWriter(memoryStream))
             {
-                writer.Write(testPacket);
+                writer.Write(gameStatePacket);
             }
 
             byte[] data = memoryStream.ToArray();
 
-            IngameNetManager.Instance.SendPacketToServer(data, PacketType.GameStateUpdate, Constants.k_nSteamNetworkingSend_Reliable);
+            IngameNetManager.Instance.SendPacketToServer(data, PacketType.GameStateUpdate,
+                Constants.k_nSteamNetworkingSend_Reliable);
         }
     }
 
-    public class NetVillager: MonoBehaviour
+    public class NetVillager : MonoBehaviour
     {
-        public Transform fpsTransform;
-        private Quaternion _rotation;
-        private Vector3 _position;
+        public static NetVillager Instance;
         public static string steamName;
         public static int id;
-        
+
         public static Dictionary<int, GameObject> NetVillagerTargets = new();
         public static Dictionary<int, GameObject> NetVillagers = new();
 
         private static GameObject _defaultVillager;
-        
-        private Random _randomGen = new();
+
+        public Transform fpsTransform;
+        public Camera fpsCamera;
         private readonly TimedAction _mainSendTick = new(1.0f / 10);
+        private Vector3 _position;
+
+        private Random _randomGen = new();
+        private Quaternion _rotation;
 
 
         private void Start()
         {
+            Instance = this;
+
             _mainSendTick.Start();
             _defaultVillager = GameObject.Find("Starting area/Villagers/Villager (3)");
 
             id = _randomGen.Next(13337, int.MaxValue);
             steamName = SteamFriends.GetPersonaName();
+
+            fpsCamera = fpsTransform.GetComponent<Camera>();
         }
-        
+
         private void Update()
         {
             if (_mainSendTick.TrueDone())
             {
                 SendPositionAndRotation();
-                
+
                 _mainSendTick.Start();
             }
 
             foreach (var netVillager in NetVillagers)
             {
-                netVillager.Value.transform.position = (netVillager.Value.transform.position - NetVillagerTargets[netVillager.Key].transform.position).magnitude > 5
-                    ? NetVillagerTargets[netVillager.Key].transform.position
-                    : Vector3.Lerp(netVillager.Value.transform.position, NetVillagerTargets[netVillager.Key].transform.position, 10f * Time.deltaTime);
+                netVillager.Value.transform.position = (netVillager.Value.transform.position -
+                                                        NetVillagerTargets[netVillager.Key].transform.position)
+                    .magnitude > 5
+                        ? NetVillagerTargets[netVillager.Key].transform.position
+                        : Vector3.Lerp(netVillager.Value.transform.position,
+                            NetVillagerTargets[netVillager.Key].transform.position, 10f * Time.deltaTime);
 
-                netVillager.Value.transform.rotation = Quaternion.Slerp(netVillager.Value.transform.rotation, NetVillagerTargets[netVillager.Key].transform.rotation, 5f * Time.deltaTime);
+                netVillager.Value.transform.rotation = Quaternion.Slerp(netVillager.Value.transform.rotation,
+                    NetVillagerTargets[netVillager.Key].transform.rotation, 5f * Time.deltaTime);
             }
         }
 
@@ -79,32 +91,36 @@ namespace PoPM
         {
             var playerInfoSender = new GameObject();
             playerInfoSender.AddComponent<NetVillager>();
-            playerInfoSender.GetComponent<NetVillager>().fpsTransform = GameObject.Find("FPSController/FirstPersonCharacter").transform;
+            playerInfoSender.GetComponent<NetVillager>().fpsTransform =
+                GameObject.Find("FPSController/FirstPersonCharacter").transform;
         }
 
         public static void RegisterClientTransform(ActorPacket actorPacket)
         {
             if (!NetVillagerTargets.ContainsKey(actorPacket.ID))
             {
-                Plugin.Logger.LogInfo($"New Villager (Player) instantiated with name: {actorPacket.Name} id: {actorPacket.ID}");
-                
+                Plugin.Logger.LogInfo(
+                    $"New Villager (Player) instantiated with name: {actorPacket.Name} id: {actorPacket.ID}");
+
                 NetVillagerTargets.Add(actorPacket.ID, new GameObject());
-                
+
                 GameObject villager = Instantiate(_defaultVillager);
-                
-                //villager.AddComponent<UI.NameTag>().GetComponent<UI.NameTag>().name = actorPacket.Name;
-                
+
+                villager.AddComponent<NameTag>().GetComponent<NameTag>().name = actorPacket.Name;
+
                 NetVillagers.Add(actorPacket.ID, villager);
             }
-            
+
             foreach (var target in NetVillagerTargets)
             {
                 if (target.Key == actorPacket.ID)
                 {
-                    target.Value.transform.position = actorPacket.Position - new Vector3(0, 1.6f, 0); // To ground offset;
+                    target.Value.transform.position =
+                        actorPacket.Position - new Vector3(0, 1.6f, 0); // To ground offset;
 
                     var eulerAngles = target.Value.transform.eulerAngles;
-                    target.Value.transform.rotation = Quaternion.Euler(eulerAngles.x, actorPacket.FacingDirection.y, eulerAngles.z);
+                    target.Value.transform.rotation =
+                        Quaternion.Euler(eulerAngles.x, actorPacket.FacingDirection.y, eulerAngles.z);
                 }
             }
         }
@@ -117,11 +133,11 @@ namespace PoPM
             _rotation = fpsTransform.rotation;
 
             // If we dont move or we are paused, dont bother on sending the position
-            if ((_position == prevPosition && _rotation == prevRotation) || LobbySystem.Instance.isPauseMenu) 
+            if ((_position == prevPosition && _rotation == prevRotation) || LobbySystem.Instance.isPauseMenu)
                 return;
 
             using MemoryStream memoryStream = new MemoryStream();
-            var testPacket = new ActorPacket
+            var actorPacket = new ActorPacket
             {
                 Name = steamName,
                 ID = id,
@@ -130,12 +146,13 @@ namespace PoPM
             };
             using (var writer = new ProtocolWriter(memoryStream))
             {
-                writer.Write(testPacket);
+                writer.Write(actorPacket);
             }
 
             byte[] data = memoryStream.ToArray();
 
-            IngameNetManager.Instance.SendPacketToServer(data, PacketType.ActorUpdate, Constants.k_nSteamNetworkingSend_Unreliable);
+            IngameNetManager.Instance.SendPacketToServer(data, PacketType.ActorUpdate,
+                Constants.k_nSteamNetworkingSend_Unreliable);
         }
-    }    
+    }
 }
