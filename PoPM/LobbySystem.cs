@@ -41,9 +41,6 @@ namespace PoPM
     {
         static void Prefix()
         {
-            if (LobbySystem.Instance.isInLobby && !LobbySystem.Instance.isLobbyOwner)
-                return;
-
             LobbySystem.Instance.isPauseMenu = false;
         }
 
@@ -103,7 +100,7 @@ namespace PoPM
         // idfk why making dummy vars assigns for the callback but it somehow makes the callbacks be called
         private Callback<LobbyEnter_t> _lobbyEnter;
 
-        private TimedAction delayPlay = new(0.5f);
+        private TimedAction delayPlay = new(1f);
 
         public Stack<string> GUIStack = new();
 
@@ -138,13 +135,8 @@ namespace PoPM
 
             if (SteamMatchmaking.GetLobbyData(actualLobbyID, "started") == "yes" && !isLobbyOwner && !isInGame)
             {
-                delayPlay.Start();
-                isInGame = true;
-            }
-
-            if (delayPlay.TrueDone()) // If we dont delay the joining, the host can only see one client at the time
-            {
                 FindObjectOfType<MainMenu>().Play(true);
+                isInGame = true;
             }
         }
 

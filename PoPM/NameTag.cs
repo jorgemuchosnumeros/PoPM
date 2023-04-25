@@ -12,6 +12,7 @@ namespace PoPM
         public static Camera Camera;
 
         private static GameObject _nameTagPrefab;
+
         public new string name;
 
         public int nameTagFontSize = 16;
