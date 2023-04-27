@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using HarmonyLib;
 using Steamworks;
 using UnityEngine;
@@ -31,6 +33,25 @@ namespace PoPM
         }
     }
 
+    [HarmonyPatch(typeof(PlayerDeath), nameof(PlayerDeath.Trigger))]
+    public static class RemoveBobPatch
+    {
+        static void Postfix(PlayerDeath __instance)
+        {
+            if (NetVillager.Instance.removeBobAnimation) //TODO: Make it actually work
+            {
+                __instance.gameObject.SetActive(false);
+                var lavaSplash = (GameObject) typeof(PlayerDeath)
+                    .GetField("lavaSplash", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(__instance);
+                lavaSplash.SetActive(false);
+
+                var fire = (ParticleSystem) typeof(PlayerDeath)
+                    .GetField("fire", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(__instance);
+                fire.Stop();
+            }
+        }
+    }
+
     public class NetVillager : MonoBehaviour
     {
         public static NetVillager Instance;
@@ -39,11 +60,15 @@ namespace PoPM
 
         public static Dictionary<int, GameObject> NetVillagerTargets = new();
         public static Dictionary<int, GameObject> NetVillagers = new();
+        public static Dictionary<string, int> NetVillagersSteamName2ID = new();
 
-        private static GameObject _defaultVillager;
+        private static GameObject _defaultVillager = null;
 
         public Transform fpsTransform;
         public Camera fpsCamera;
+
+        public bool removeBobAnimation;
+
         private readonly TimedAction _mainSendTick = new(1.0f / 10);
         private Vector3 _position;
 
@@ -53,9 +78,14 @@ namespace PoPM
 
         private void Start()
         {
+            NetVillagerTargets = new();
+            NetVillagers = new();
+            NetVillagersSteamName2ID = new();
+
             Instance = this;
 
             _mainSendTick.Start();
+
             _defaultVillager = GameObject.Find("Starting area/Villagers/Villager (3)");
 
             id = _randomGen.Next(13337, int.MaxValue);
@@ -109,6 +139,7 @@ namespace PoPM
                 villager.AddComponent<NameTag>().GetComponent<NameTag>().name = actorPacket.Name;
 
                 NetVillagers.Add(actorPacket.ID, villager);
+                NetVillagersSteamName2ID.Add(actorPacket.Name, actorPacket.ID);
             }
 
             foreach (var target in NetVillagerTargets)
@@ -153,6 +184,29 @@ namespace PoPM
 
             IngameNetManager.Instance.SendPacketToServer(data, PacketType.ActorUpdate,
                 Constants.k_nSteamNetworkingSend_Unreliable);
+        }
+
+        public void DestroyVillagerByName(string SteamName)
+        {
+            var ID = NetVillagersSteamName2ID[SteamName];
+
+            try
+            {
+                var nameTag = NetVillagers[ID].GetComponent<NameTag>();
+                Destroy(nameTag.textInstance);
+                Destroy(nameTag);
+
+                Destroy(NetVillagers[ID]);
+                NetVillagers.Remove(ID);
+                Destroy(NetVillagerTargets[ID]);
+                NetVillagerTargets.Remove(ID);
+
+                NetVillagersSteamName2ID.Remove(SteamName);
+            }
+            catch (Exception e)
+            {
+                Plugin.Logger.LogError($"{SteamName}: {e}");
+            }
         }
     }
 }

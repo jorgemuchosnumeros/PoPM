@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
-using System.Reflection;
 using System.Runtime.InteropServices;
 using HarmonyLib;
 using Steamworks;
@@ -32,11 +31,24 @@ namespace PoPM
             IngameNetManager.Instance.ResetState();
         }
     }
-    
+
+    [HarmonyPatch(typeof(MenuTransitions), "StopTime")]
+    public class StopTimePatch
+    {
+        static void Prefix()
+        {
+            if (LobbySystem.Instance.isInLobby)
+                return;
+        }
+    }
+
     public class IngameNetManager : MonoBehaviour
     {
         public static IngameNetManager Instance;
-        
+
+        /// Server owned
+        private static readonly int PACKET_SLACK = 256;
+
         public float _ticker2 = 0f;
         public int _pps = 0;
         public int _total = 0;
@@ -44,41 +56,37 @@ namespace PoPM
         public int _totalOut = 0;
         public int _bytesOut = 0;
         public int _totalBytesOut = 0;
-        
+
         public bool _showSpecificOutbound;
-        public Dictionary<PacketType, int> _savedBytesOuts = new();
-        public Dictionary<PacketType, int> _specificBytesOut = new();
-        
-        public Guid OwnGUID = Guid.NewGuid();
 
-        public SteamNetConnectionRealTimeStatus_t _realtimeStatus;
-        private SteamNetConnectionRealTimeLaneStatus_t _pLanes;
-        private int _nLanes = 1;
-        
-
-        public TimedAction MainSendTick = new TimedAction(1.0f / 10);
-        
         public HSteamNetConnection c2SConnection;
-        
+
         /// Server owned
         public HSteamListenSocket serverSocket;
-        
+
         public HSteamNetPollGroup pollGroup;
-        
+
         public List<HSteamNetConnection> serverConnections = new();
 
-        /// Server owned
-
-        private static readonly int PACKET_SLACK = 256;
-        
         public bool isHost;
-        
+
         public bool isClient;
-        
-        private Callback<SteamNetConnectionStatusChangedCallback_t> _steamNetConnectionStatusChangedCallback;
-        
+        private int _nLanes = 1;
+        private SteamNetConnectionRealTimeLaneStatus_t _pLanes;
+
+        public SteamNetConnectionRealTimeStatus_t _realtimeStatus;
+        public Dictionary<PacketType, int> _savedBytesOuts = new();
+        public Dictionary<PacketType, int> _specificBytesOut = new();
+
         private bool _startFlowFlag;
-        
+
+        private Callback<SteamNetConnectionStatusChangedCallback_t> _steamNetConnectionStatusChangedCallback;
+
+
+        public TimedAction MainSendTick = new TimedAction(1.0f / 10);
+
+        public Guid OwnGUID = Guid.NewGuid();
+
         private void Awake()
         {
             Instance = this;
@@ -91,23 +99,14 @@ namespace PoPM
             _steamNetConnectionStatusChangedCallback =
                 Callback<SteamNetConnectionStatusChangedCallback_t>.Create(OnConnectionStatus);
         }
-        
-        private void LateUpdate()
-        {
-            if (!isClient)
-                return;
-
-            Time.timeScale = 1f;
-            Time.fixedDeltaTime = Time.timeScale / 60f;
-        }
 
         private void Update()
         {
             if (Input.GetKeyDown(KeyCode.F8))
                 _showSpecificOutbound = !_showSpecificOutbound;
-            
+
             _ticker2 += Time.deltaTime;
-            
+
             if (_ticker2 > 1)
             {
                 _ticker2 = 0;
@@ -126,17 +125,122 @@ namespace PoPM
             }
         }
 
+        private void FixedUpdate()
+        {
+            if (!isClient)
+                return;
+
+            SteamNetworkingSockets.RunCallbacks();
+
+            if (isClient)
+            {
+                var msg_ptr = new IntPtr[PACKET_SLACK];
+                int msg_count =
+                    SteamNetworkingSockets.ReceiveMessagesOnConnection(c2SConnection, msg_ptr, PACKET_SLACK);
+
+                for (int msg_index = 0; msg_index < msg_count; msg_index++)
+                {
+                    var msg = Marshal.PtrToStructure<SteamNetworkingMessage_t>(msg_ptr[msg_index]);
+
+                    var msg_data = new byte[msg.m_cbSize];
+                    Marshal.Copy(msg.m_pData, msg_data, 0, msg.m_cbSize);
+
+                    using var memStream = new MemoryStream(msg_data);
+                    using var packetReader = new ProtocolReader(memStream);
+
+                    var packet = packetReader.ReadPacket();
+
+                    if (packet.Sender != OwnGUID)
+                    {
+                        _total++;
+
+                        using MemoryStream compressedStream = new MemoryStream(packet.Data);
+                        using DeflateStream decompressStream =
+                            new DeflateStream(compressedStream, CompressionMode.Decompress);
+                        using var dataStream = new ProtocolReader(decompressStream);
+
+                        switch (packet.ID)
+                        {
+                            case PacketType.ActorUpdate:
+                            {
+                                var actorPacket = dataStream.ReadActorPacket();
+
+                                NetVillager.RegisterClientTransform(actorPacket);
+
+                                break;
+                            }
+
+                            case PacketType.GameStateUpdate:
+                            {
+                                var gameStatePacket = dataStream.ReadGameStatePacket();
+
+                                if (gameStatePacket.EruptionTrigger && !_startFlowFlag)
+                                {
+                                    NetVillager.Instance.removeBobAnimation = true;
+                                    _startFlowFlag = true;
+                                    FindObjectOfType<Scr_LavaController>().StartLavaFlow();
+                                }
+
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (isHost)
+            {
+                var msg_ptr = new IntPtr[PACKET_SLACK];
+                int msg_count = SteamNetworkingSockets.ReceiveMessagesOnPollGroup(pollGroup, msg_ptr, PACKET_SLACK);
+
+                for (int msg_index = 0; msg_index < msg_count; msg_index++)
+                {
+                    var msg = Marshal.PtrToStructure<SteamNetworkingMessage_t>(msg_ptr[msg_index]);
+
+                    for (int i = serverConnections.Count - 1; i >= 0; i--)
+                    {
+                        var connection = serverConnections[i];
+
+                        if (connection == msg.m_conn)
+                            continue;
+
+                        var res = SteamNetworkingSockets.SendMessageToConnection(connection, msg.m_pData,
+                            (uint) msg.m_cbSize, Constants.k_nSteamNetworkingSend_Reliable, out long msg_num);
+
+                        if (res != EResult.k_EResultOK)
+                        {
+                            Plugin.Logger.LogError($"Failure {res}");
+                            serverConnections.RemoveAt(i);
+                            SteamNetworkingSockets.CloseConnection(connection, 0, null, false);
+                        }
+                    }
+
+                    Marshal.DestroyStructure<SteamNetworkingMessage_t>(msg_ptr[msg_index]);
+                }
+            }
+        }
+
+        private void LateUpdate()
+        {
+            if (!isClient)
+                return;
+
+            Time.timeScale = 1f;
+            Time.fixedDeltaTime = Time.timeScale / 60f;
+        }
+
         private void OnGUI()
         {
             if (!isClient)
                 return;
-            
+
             GUI.Label(new Rect(10, 30, 200, 40), $"Inbound: {_pps} PPS");
             GUI.Label(new Rect(10, 50, 200, 40), $"Outbound: {_ppsOut} PPS -- {_bytesOut} Bytes");
 
-            SteamNetworkingSockets.GetConnectionRealTimeStatus(c2SConnection, ref _realtimeStatus, _nLanes, ref _pLanes);
+            SteamNetworkingSockets.GetConnectionRealTimeStatus(c2SConnection, ref _realtimeStatus, _nLanes,
+                ref _pLanes);
             GUI.Label(new Rect(10, 80, 200, 40), $"Ping: {_realtimeStatus.m_nPing} ms");
-            
+
             if (_showSpecificOutbound)
             {
                 var ordered = _savedBytesOuts.OrderBy(x => -x.Value).ToDictionary(x => x.Key, x => x.Value);
@@ -148,10 +252,9 @@ namespace PoPM
                 }
             }
         }
-        
+
         public void ResetState()
         {
-            
             _ticker2 = 0f;
             _pps = 0;
             _total = 0;
@@ -160,14 +263,14 @@ namespace PoPM
             _bytesOut = 0;
             _totalBytesOut = 0;
 
-            
             MainSendTick.Start();
-            
-            isHost = false;
 
+            isHost = false;
             isClient = false;
+
+            NetVillager.Instance.removeBobAnimation = false;
         }
-        
+
         public void OpenRelay()
         {
             Plugin.Logger.LogInfo("Starting server socket for connections.");
@@ -179,7 +282,7 @@ namespace PoPM
 
             isHost = true;
         }
-        
+
         public void StartAsServer()
         {
             Plugin.Logger.LogInfo("Starting server and client.");
@@ -187,7 +290,7 @@ namespace PoPM
             isHost = true;
 
             isClient = true;
-            
+
             var iden = new SteamNetworkingIdentity
             {
                 m_eType = ESteamNetworkingIdentityType.k_ESteamNetworkingIdentityType_SteamID,
@@ -197,7 +300,7 @@ namespace PoPM
 
             c2SConnection = SteamNetworkingSockets.ConnectP2P(ref iden, 0, 0, null);
         }
-        
+
         public void StartAsClient(CSteamID host)
         {
             Plugin.Logger.LogInfo("Starting client.");
@@ -210,10 +313,10 @@ namespace PoPM
             };
 
             iden.SetSteamID(host);
-            
+
             StartCoroutine(RepeatTryConnect(iden));
         }
-        
+
         IEnumerator RepeatTryConnect(SteamNetworkingIdentity iden)
         {
             for (int i = 0; i < 30; i++)
@@ -225,10 +328,11 @@ namespace PoPM
                 {
                     m_eValue = ESteamNetworkingConfigValue.k_ESteamNetworkingConfig_TimeoutInitial,
                     m_eDataType = ESteamNetworkingConfigDataType.k_ESteamNetworkingConfig_Int32,
-                    m_val = new SteamNetworkingConfigValue_t.OptionValue { m_int32 = 2 * 60 * 1000 },
+                    m_val = new SteamNetworkingConfigValue_t.OptionValue {m_int32 = 2 * 60 * 1000},
                 };
 
-                c2SConnection = SteamNetworkingSockets.ConnectP2P(ref iden, 0, 1, new SteamNetworkingConfigValue_t[] { timeout });
+                c2SConnection =
+                    SteamNetworkingSockets.ConnectP2P(ref iden, 0, 1, new SteamNetworkingConfigValue_t[] {timeout});
 
                 if (c2SConnection != HSteamNetConnection.Invalid)
                     yield break;
@@ -244,10 +348,12 @@ namespace PoPM
             _totalOut++;
 
             using MemoryStream compressOut = new MemoryStream();
-            using (DeflateStream deflateStream = new DeflateStream(compressOut, System.IO.Compression.CompressionLevel.Optimal))
+            using (DeflateStream deflateStream =
+                   new DeflateStream(compressOut, System.IO.Compression.CompressionLevel.Optimal))
             {
                 deflateStream.Write(data, 0, data.Length);
             }
+
             byte[] compressed = compressOut.ToArray();
 
             using MemoryStream packetStream = new MemoryStream();
@@ -257,7 +363,7 @@ namespace PoPM
                 Sender = OwnGUID,
                 Data = compressed
             };
-            
+
             using (var writer = new ProtocolWriter(packetStream))
             {
                 writer.Write(packet);
@@ -277,13 +383,14 @@ namespace PoPM
             {
                 fixed (byte* p_msg = packet_data)
                 {
-                    var res = SteamNetworkingSockets.SendMessageToConnection(c2SConnection, (IntPtr)p_msg, (uint)packet_data.Length, send_flags, out long num);
+                    var res = SteamNetworkingSockets.SendMessageToConnection(c2SConnection, (IntPtr) p_msg,
+                        (uint) packet_data.Length, send_flags, out long num);
                     if (res != EResult.k_EResultOK)
                         Plugin.Logger.LogError($"Packet failed to send: {res}");
                 }
             }
         }
-        
+
         private void OnConnectionStatus(SteamNetConnectionStatusChangedCallback_t pCallback)
         {
             var info = pCallback.m_info;
@@ -332,9 +439,9 @@ namespace PoPM
                             SteamNetworkingUtils.SetConfigValue(
                                 ESteamNetworkingConfigValue.k_ESteamNetworkingConfig_SendBufferSize,
                                 ESteamNetworkingConfigScope.k_ESteamNetworkingConfig_Connection,
-                                (IntPtr)pCallback.m_hConn.m_HSteamNetConnection,
+                                (IntPtr) pCallback.m_hConn.m_HSteamNetConnection,
                                 ESteamNetworkingConfigDataType.k_ESteamNetworkingConfig_Int32,
-                                (IntPtr)(&_2mb));
+                                (IntPtr) (&_2mb));
                         }
 
                         Plugin.Logger.LogInfo("Accepted the connection");
@@ -344,7 +451,10 @@ namespace PoPM
                     case ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_ProblemDetectedLocally:
                         Plugin.Logger.LogInfo($"Killing connection from {info.m_identityRemote.GetSteamID()}.");
                         SteamNetworkingSockets.CloseConnection(pCallback.m_hConn, 0, null, false);
-                        //TODO: Clear NetActors (?)
+
+                        // FIXME: It is a good idea send along the actor packet the steam CID jic
+                        NetVillager.Instance.DestroyVillagerByName(
+                            SteamFriends.GetFriendPersonaName(info.m_identityRemote.GetSteamID()));
 
                         break;
                 }
@@ -362,99 +472,9 @@ namespace PoPM
                         Plugin.Logger.LogInfo($"Killing connection from {info.m_identityRemote.GetSteamID()}.");
                         SteamNetworkingSockets.CloseConnection(pCallback.m_hConn, 0, null, false);
 
-                        //MainMenu.Restart();
-                        typeof(MainMenu).GetMethod("Restart", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(FindObjectOfType<MainMenu>(), new object[] { });
+                        LobbySystem.Instance.RestartMenu();
+
                         break;
-                }
-            }
-        }
-
-        private void FixedUpdate()
-        {
-            if (!isClient)
-                return;
-            
-            SteamNetworkingSockets.RunCallbacks();
-
-            if (isClient)
-            {
-                var msg_ptr = new IntPtr[PACKET_SLACK];
-                int msg_count = SteamNetworkingSockets.ReceiveMessagesOnConnection(c2SConnection, msg_ptr, PACKET_SLACK);
-                
-                for (int msg_index = 0; msg_index < msg_count; msg_index++)
-                {
-                    var msg = Marshal.PtrToStructure<SteamNetworkingMessage_t>(msg_ptr[msg_index]);
-
-                    var msg_data = new byte[msg.m_cbSize];
-                    Marshal.Copy(msg.m_pData, msg_data, 0, msg.m_cbSize);
-
-                    using var memStream = new MemoryStream(msg_data);
-                    using var packetReader = new ProtocolReader(memStream);
-
-                    var packet = packetReader.ReadPacket();
-
-                    if (packet.Sender != OwnGUID)
-                    {
-                        _total++;
-
-                        using MemoryStream compressedStream = new MemoryStream(packet.Data);
-                        using DeflateStream decompressStream = new DeflateStream(compressedStream, CompressionMode.Decompress);
-                        using var dataStream = new ProtocolReader(decompressStream);
-
-                        switch (packet.ID)
-                        {
-                            case PacketType.ActorUpdate:
-                            {
-                                var actorPacket = dataStream.ReadActorPacket();
-                                
-                                NetVillager.RegisterClientTransform(actorPacket);
-                                
-                                break;
-                            }
-
-                            case PacketType.GameStateUpdate:
-                            {
-                                var gameStatePacket = dataStream.ReadGameStatePacket();
-
-                                if (gameStatePacket.EruptionTrigger && !_startFlowFlag)
-                                {
-                                    FindObjectOfType<Scr_LavaController>().StartLavaFlow();
-                                    _startFlowFlag = true;
-                                }
-
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (isHost)
-            {
-                var msg_ptr = new IntPtr[PACKET_SLACK];
-                int msg_count = SteamNetworkingSockets.ReceiveMessagesOnPollGroup(pollGroup, msg_ptr, PACKET_SLACK);
-
-                for (int msg_index = 0; msg_index < msg_count; msg_index++)
-                {
-                    var msg = Marshal.PtrToStructure<SteamNetworkingMessage_t>(msg_ptr[msg_index]);
-
-                    for (int i = serverConnections.Count - 1; i >= 0; i--)
-                    {
-                        var connection = serverConnections[i];
-
-                        if (connection == msg.m_conn)
-                            continue;
-
-                        var res = SteamNetworkingSockets.SendMessageToConnection(connection, msg.m_pData, (uint)msg.m_cbSize, Constants.k_nSteamNetworkingSend_Reliable, out long msg_num);
-
-                        if (res != EResult.k_EResultOK)
-                        {
-                            Plugin.Logger.LogError($"Failure {res}");
-                            serverConnections.RemoveAt(i);
-                            SteamNetworkingSockets.CloseConnection(connection, 0, null, false);
-                        }
-                    }
-                    Marshal.DestroyStructure<SteamNetworkingMessage_t>(msg_ptr[msg_index]);
                 }
             }
         }

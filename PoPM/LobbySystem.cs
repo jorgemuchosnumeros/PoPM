@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Reflection;
 using HarmonyLib;
 using Steamworks;
 using TMPro;
@@ -42,6 +43,8 @@ namespace PoPM
         static void Prefix()
         {
             LobbySystem.Instance.isPauseMenu = false;
+            LobbySystem.Instance.isInGame = true;
+            LobbySystem.Instance.GUIStack.Clear();
         }
 
         static void Postfix()
@@ -125,7 +128,7 @@ namespace PoPM
 
         private void Update()
         {
-            if (Input.GetKeyDown(KeyCode.M) && !isInLobby)
+            if (Input.GetKeyDown(KeyCode.M) && !isInLobby && !isInGame)
             {
                 if (GUIStack.Count == 0)
                     GUIStack.Push("Main");
@@ -136,7 +139,6 @@ namespace PoPM
             if (SteamMatchmaking.GetLobbyData(actualLobbyID, "started") == "yes" && !isLobbyOwner && !isInGame)
             {
                 FindObjectOfType<MainMenu>().Play(true);
-                isInGame = true;
             }
         }
 
@@ -321,9 +323,13 @@ namespace PoPM
             if (!isInLobby)
                 return;
 
-            if (GUIStack.Peek() == "Guest" || GUIStack.Peek() == "Host")
+
+            if (GUIStack.Count != 0)
             {
-                GUIStack.Pop();
+                if (GUIStack.Peek() == "Guest" || GUIStack.Peek() == "Host")
+                {
+                    GUIStack.Pop();
+                }
             }
 
             isInLobby = false;
@@ -331,6 +337,7 @@ namespace PoPM
 
             Plugin.Logger.LogInfo($"Leaving lobby! {actualLobbyID.GetAccountID()}");
             SteamMatchmaking.LeaveLobby(actualLobbyID);
+            IngameNetManager.Instance.ResetState();
 
             mainMenu.transform.GetChild(0).GetComponent<Image>().enabled = false;
             mainMenu.transform.GetChild(0).GetComponent<Button>().enabled = false;
@@ -380,6 +387,17 @@ namespace PoPM
                     ExitLobby();
                 }
             }
+        }
+
+        public void RestartMenu()
+        {
+            Plugin.Logger.LogInfo("Restarting");
+            var menu = FindObjectOfType<MainMenu>();
+            menu.isActive = true;
+            typeof(MainMenu).GetField("restarting", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.SetValue(menu, false);
+            typeof(MainMenu).GetMethod("Restart", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.Invoke(menu, new object[] { });
         }
     }
 }

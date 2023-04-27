@@ -43,7 +43,7 @@ namespace PoPM
         private void Update()
         {
             if (!_setName &&
-                _nameTagText.text == "GenericUsername123") //TODO: Set the default text in the bundle empty
+                _nameTagText.text == "GenericUsername123") //FIXME: Set the default text in the bundle to empty string
             {
                 _setName = true;
                 _nameTagText.text = name;
