@@ -68,3 +68,9 @@ You joined a lobby, now wait for the host to start.
 - UnityEngine.UI.dll
 
 You will also need `Steamworks.NET.dll` found [here](https://github.com/rlabrecque/Steamworks.NET/releases/download/20.1.0/Steamworks.NET-Standalone_20.1.0.zip)
+
+## Special thanks
+- To [ABigPickle](https://github.com/iliadsh) for letting me repurpose part of [RavenM](https://github.com/iliadsh/RavenM) for this project
+- To [5ro4](https://github.com/5ro4) for making such a fine game 🧐🍷
+- To [AntonioMA](https://github.com/4nt0n10M4) and [Radsi889](https://github.com/radsi) for their contributions
+- And to rednes_, imPeko, CrimsonScarf and eltete4 for offering to test the mod
