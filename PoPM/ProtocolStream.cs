@@ -1,6 +1,5 @@
 using System;
 using System.Collections;
-using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 
@@ -21,13 +20,13 @@ namespace PoPM
             {
                 if ((value & ~0x7F) == 0)
                 {
-                    Write((byte)value);
+                    Write((byte) value);
                     return;
                 }
 
-                Write((byte)((value & 0x7F) | 0x80));
+                Write((byte) ((value & 0x7F) | 0x80));
 
-                value = (int)((uint)value >> 7);
+                value = (int) ((uint) value >> 7);
             }
         }
 
@@ -143,18 +142,26 @@ namespace PoPM
         {
             Write(value.ID);
             Write(value.Name);
+            Write(value.SteamID);
             Write(value.Position);
             Write(value.FacingDirection);
+            Write(value.Flags);
+        }
+
+        public void Write(ActorStateFlags value)
+        {
+            Write(value.Disconnected);
+            Write(value.Dead);
         }
 
         public void Write(Packet value)
         {
-            Write((int)value.ID);
+            Write((int) value.ID);
             Write(value.Sender.ToByteArray());
             Write(value.Data.Length);
             Write(value.Data);
         }
-        
+
         public void Write(GameStatePacket value)
         {
             Write(value.ID);
@@ -172,7 +179,6 @@ namespace PoPM
         /// <summary>
         /// Adapted from https://wiki.vg/Protocol
         /// </summary>
-
         public override int ReadInt32()
         {
             int value = 0;
@@ -193,7 +199,7 @@ namespace PoPM
 
             return value;
         }
-        
+
         public Vector2 ReadVector2()
         {
             return new Vector2
@@ -279,6 +285,7 @@ namespace PoPM
             {
                 o[i] = ReadInt32();
             }
+
             return o;
         }
 
@@ -290,6 +297,7 @@ namespace PoPM
             {
                 o[i] = ReadSingle();
             }
+
             return o;
         }
 
@@ -301,6 +309,7 @@ namespace PoPM
             {
                 o[i] = ReadBoolean();
             }
+
             return o;
         }
 
@@ -308,18 +317,29 @@ namespace PoPM
         {
             return new BitArray(ReadBytes(ReadInt32()));
         }
-        
+
         public ActorPacket ReadActorPacket()
         {
             return new ActorPacket
             {
                 ID = ReadInt32(),
                 Name = ReadString(),
+                SteamID = ReadString(),
                 Position = ReadVector3(),
                 FacingDirection = ReadVector3(),
+                Flags = ReadActorFlags(),
             };
         }
-        
+
+        public ActorStateFlags ReadActorFlags()
+        {
+            return new ActorStateFlags
+            {
+                Disconnected = ReadBoolean(),
+                Dead = ReadBoolean(),
+            };
+        }
+
         public GameStatePacket ReadGameStatePacket()
         {
             return new GameStatePacket
@@ -329,11 +349,12 @@ namespace PoPM
                 EruptionTrigger = ReadBoolean(),
             };
         }
+
         public Packet ReadPacket()
         {
             return new Packet
             {
-                ID = (PacketType)ReadInt32(),
+                ID = (PacketType) ReadInt32(),
                 Sender = new Guid(ReadBytes(16)),
                 Data = ReadBytes(ReadInt32()),
             };

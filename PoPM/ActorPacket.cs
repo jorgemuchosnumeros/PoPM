@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace PoPM
@@ -8,12 +7,22 @@ namespace PoPM
     /// </summary>
     public class ActorPacket
     {
+        public Vector3 FacingDirection;
+
+        public ActorStateFlags Flags;
         public int ID;
 
         public string Name;
 
         public Vector3 Position;
 
-        public Vector3 FacingDirection;
+        public string SteamID;
+    }
+
+    public struct ActorStateFlags
+    {
+        public bool Disconnected;
+
+        public bool Dead;
     }
 }

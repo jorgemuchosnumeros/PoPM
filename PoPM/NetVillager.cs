@@ -17,8 +17,8 @@ namespace PoPM
             using MemoryStream memoryStream = new MemoryStream();
             var gameStatePacket = new GameStatePacket()
             {
-                Name = NetVillager.steamName,
-                ID = NetVillager.id,
+                Name = NetVillager.SteamName,
+                ID = NetVillager.GameID,
                 EruptionTrigger = true,
             };
             using (var writer = new ProtocolWriter(memoryStream))
@@ -38,7 +38,7 @@ namespace PoPM
     {
         static void Postfix(PlayerDeath __instance)
         {
-            if (NetVillager.Instance.removeBobAnimation) //TODO: Make it actually work
+            if (NetVillager.Instance.removeBobAnimation)
             {
                 __instance.gameObject.SetActive(false);
                 var lavaSplash = (GameObject) typeof(PlayerDeath)
@@ -55,14 +55,15 @@ namespace PoPM
     public class NetVillager : MonoBehaviour
     {
         public static NetVillager Instance;
-        public static string steamName;
-        public static int id;
+        public static string SteamName;
+        public static CSteamID SteamID = CSteamID.Nil;
+        public static int GameID;
 
         public static Dictionary<int, GameObject> NetVillagerTargets = new();
         public static Dictionary<int, GameObject> NetVillagers = new();
-        public static Dictionary<string, int> NetVillagersSteamName2ID = new();
+        public static Dictionary<CSteamID, int> NetVillagersSteamID2GameID = new();
 
-        private static GameObject _defaultVillager = null;
+        private static GameObject _defaultVillager;
 
         public Transform fpsTransform;
         public Camera fpsCamera;
@@ -80,7 +81,7 @@ namespace PoPM
         {
             NetVillagerTargets = new();
             NetVillagers = new();
-            NetVillagersSteamName2ID = new();
+            NetVillagersSteamID2GameID = new();
 
             Instance = this;
 
@@ -88,8 +89,9 @@ namespace PoPM
 
             _defaultVillager = GameObject.Find("Starting area/Villagers/Villager (3)");
 
-            id = _randomGen.Next(13337, int.MaxValue);
-            steamName = SteamFriends.GetPersonaName();
+            GameID = _randomGen.Next(13337, int.MaxValue);
+            SteamName = SteamFriends.GetPersonaName();
+            SteamID = SteamUser.GetSteamID();
 
             fpsCamera = fpsTransform.GetComponent<Camera>();
         }
@@ -105,6 +107,12 @@ namespace PoPM
 
             foreach (var netVillager in NetVillagers)
             {
+                if (netVillager.Value == null)
+                {
+                    // TODO: Idk
+                    return;
+                }
+
                 netVillager.Value.transform.position = (netVillager.Value.transform.position -
                                                         NetVillagerTargets[netVillager.Key].transform.position)
                     .magnitude > 5
@@ -130,16 +138,17 @@ namespace PoPM
             if (!NetVillagerTargets.ContainsKey(actorPacket.ID))
             {
                 Plugin.Logger.LogInfo(
-                    $"New Villager (Player) instantiated with name: {actorPacket.Name} id: {actorPacket.ID}");
+                    $"New Villager (Player) instantiated with name: {actorPacket.Name}, {actorPacket.SteamID} id: {actorPacket.ID}");
 
                 NetVillagerTargets.Add(actorPacket.ID, new GameObject());
 
                 GameObject villager = Instantiate(_defaultVillager);
 
-                villager.AddComponent<NameTag>().GetComponent<NameTag>().name = actorPacket.Name;
+                villager.AddComponent<NameTag>().GetComponent<NameTag>().nameTagText = actorPacket.Name;
 
                 NetVillagers.Add(actorPacket.ID, villager);
-                NetVillagersSteamName2ID.Add(actorPacket.Name, actorPacket.ID);
+
+                NetVillagersSteamID2GameID.Add(new CSteamID(Convert.ToUInt64(actorPacket.SteamID)), actorPacket.ID);
             }
 
             foreach (var target in NetVillagerTargets)
@@ -156,6 +165,30 @@ namespace PoPM
             }
         }
 
+        public void SendDisconnect()
+        {
+            using MemoryStream memoryStream = new MemoryStream();
+            var actorPacket = new ActorPacket
+            {
+                ID = GameID,
+                Name = SteamName,
+                SteamID = SteamID.m_SteamID.ToString(),
+                Flags = new ActorStateFlags
+                {
+                    Disconnected = true,
+                },
+            };
+            using (var writer = new ProtocolWriter(memoryStream))
+            {
+                writer.Write(actorPacket);
+            }
+
+            byte[] data = memoryStream.ToArray();
+
+            IngameNetManager.Instance.SendPacketToServer(data, PacketType.ActorUpdate,
+                Constants.k_nSteamNetworkingSend_Reliable);
+        }
+
         private void SendPositionAndRotation()
         {
             var prevPosition = _position;
@@ -170,8 +203,9 @@ namespace PoPM
             using MemoryStream memoryStream = new MemoryStream();
             var actorPacket = new ActorPacket
             {
-                Name = steamName,
-                ID = id,
+                Name = SteamName,
+                ID = GameID,
+                SteamID = SteamID.m_SteamID.ToString(),
                 Position = fpsTransform.position,
                 FacingDirection = fpsTransform.eulerAngles,
             };
@@ -186,26 +220,26 @@ namespace PoPM
                 Constants.k_nSteamNetworkingSend_Unreliable);
         }
 
-        public void DestroyVillagerByName(string SteamName)
+        public static void DestroyVillagerBySteamID(string steamID)
         {
-            var ID = NetVillagersSteamName2ID[SteamName];
+            CSteamID csteamID = new CSteamID(Convert.ToUInt64(steamID));
 
+            var ID = NetVillagersSteamID2GameID[csteamID];
+
+            Plugin.Logger.LogInfo("Destroy");
             try
             {
-                var nameTag = NetVillagers[ID].GetComponent<NameTag>();
-                Destroy(nameTag.textInstance);
-                Destroy(nameTag);
-
+                Destroy(NetVillagers[ID].GetComponent<NameTag>().textInstance);
                 Destroy(NetVillagers[ID]);
                 NetVillagers.Remove(ID);
                 Destroy(NetVillagerTargets[ID]);
                 NetVillagerTargets.Remove(ID);
 
-                NetVillagersSteamName2ID.Remove(SteamName);
+                NetVillagersSteamID2GameID.Remove(csteamID);
             }
             catch (Exception e)
             {
-                Plugin.Logger.LogError($"{SteamName}: {e}");
+                Plugin.Logger.LogError($"{steamID}: {e}");
             }
         }
     }

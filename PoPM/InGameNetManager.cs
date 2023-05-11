@@ -20,15 +20,7 @@ namespace PoPM
     {
         static void Postfix()
         {
-            if (!IngameNetManager.Instance.isClient)
-                return;
-
-            SteamNetworkingSockets.CloseConnection(IngameNetManager.Instance.c2SConnection, 0, string.Empty, false);
-
-            if (IngameNetManager.Instance.isHost)
-                SteamNetworkingSockets.CloseListenSocket(IngameNetManager.Instance.serverSocket);
-
-            IngameNetManager.Instance.ResetState();
+            IngameNetManager.ExitGame();
         }
     }
 
@@ -165,7 +157,10 @@ namespace PoPM
                             {
                                 var actorPacket = dataStream.ReadActorPacket();
 
-                                NetVillager.RegisterClientTransform(actorPacket);
+                                if (!actorPacket.Flags.Disconnected)
+                                    NetVillager.RegisterClientTransform(actorPacket);
+                                else
+                                    NetVillager.DestroyVillagerBySteamID(actorPacket.SteamID);
 
                                 break;
                             }
@@ -271,6 +266,27 @@ namespace PoPM
             NetVillager.Instance.removeBobAnimation = false;
         }
 
+        public static void ExitGame()
+        {
+            if (!Instance.isClient)
+                return;
+
+            NetVillager.Instance.SendDisconnect();
+
+            SteamNetworkingSockets.CloseConnection(Instance.c2SConnection, 0, string.Empty, false);
+
+            if (Instance.isHost)
+                SteamNetworkingSockets.CloseListenSocket(Instance.serverSocket);
+
+            Instance.ResetState();
+
+            LobbySystem.Instance.isPauseMenu = false;
+            LobbySystem.Instance.isInGame = false;
+            LobbySystem.Instance.isGameLoaded = false;
+
+            LobbySystem.Instance.ExitLobby();
+        }
+
         public void OpenRelay()
         {
             Plugin.Logger.LogInfo("Starting server socket for connections.");
@@ -339,8 +355,6 @@ namespace PoPM
 
                 yield return new WaitForSeconds(0.5f);
             }
-
-            //TODO: Abandon when connection attempt unsuccessful
         }
 
         public void SendPacketToServer(byte[] data, PacketType type, int send_flags)
@@ -449,14 +463,12 @@ namespace PoPM
 
                     case ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_ClosedByPeer:
                     case ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_ProblemDetectedLocally:
+                    {
                         Plugin.Logger.LogInfo($"Killing connection from {info.m_identityRemote.GetSteamID()}.");
                         SteamNetworkingSockets.CloseConnection(pCallback.m_hConn, 0, null, false);
 
-                        // FIXME: It is a good idea send along the actor packet the steam CID jic
-                        NetVillager.Instance.DestroyVillagerByName(
-                            SteamFriends.GetFriendPersonaName(info.m_identityRemote.GetSteamID()));
-
                         break;
+                    }
                 }
             }
             else

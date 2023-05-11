@@ -54,6 +54,7 @@ namespace PoPM
 
         private void OnApplicationQuit()
         {
+            IngameNetManager.ExitGame();
             LobbySystem.Instance.ExitLobby();
         }
     }

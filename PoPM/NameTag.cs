@@ -13,7 +13,7 @@ namespace PoPM
 
         private static GameObject _nameTagPrefab;
 
-        public new string name;
+        public string nameTagText;
 
         public int nameTagFontSize = 16;
 
@@ -42,12 +42,18 @@ namespace PoPM
 
         private void Update()
         {
+            if (gameObject == null)
+            {
+                Plugin.Logger.LogInfo("Test1");
+                Destroy(this);
+            }
+
             if (!_setName &&
                 _nameTagText.text == "GenericUsername123") //FIXME: Set the default text in the bundle to empty string
             {
                 _setName = true;
-                _nameTagText.text = name;
-                Plugin.Logger.LogInfo($"Created nametag for {name}");
+                _nameTagText.text = nameTagText;
+                Plugin.Logger.LogInfo($"Created nametag for {nameTagText}");
             }
 
             Vector3 currentPos = gameObject.transform.position + (Vector3.up * 1.8f);

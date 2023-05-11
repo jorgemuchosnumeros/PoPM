@@ -66,19 +66,6 @@ namespace PoPM
         }
     }
 
-    [HarmonyPatch(typeof(MainMenu), "Restart")]
-    public class MainMenuRestartPatch
-    {
-        static void Postfix()
-        {
-            LobbySystem.Instance.isPauseMenu = false;
-            LobbySystem.Instance.isInGame = false;
-            LobbySystem.Instance.isGameLoaded = false;
-
-            LobbySystem.Instance.ExitLobby();
-        }
-    }
-
 
     public class LobbySystem : MonoBehaviour
     {
@@ -89,7 +76,7 @@ namespace PoPM
         public CSteamID ownerID = CSteamID.Nil;
         public string ownerName;
 
-        public int maxLobbyMembers = 8;
+        public int maxLobbyMembers = 250;
 
         public bool isPauseMenu;
         public bool isInGame;
@@ -138,7 +125,14 @@ namespace PoPM
 
             if (SteamMatchmaking.GetLobbyData(actualLobbyID, "started") == "yes" && !isLobbyOwner && !isInGame)
             {
+                delayPlay.Start();
+                isInGame = true;
+            }
+
+            if (delayPlay.TrueDone())
+            {
                 FindObjectOfType<MainMenu>().Play(true);
+                delayPlay.TurnOff();
             }
         }
 
@@ -322,7 +316,6 @@ namespace PoPM
         {
             if (!isInLobby)
                 return;
-
 
             if (GUIStack.Count != 0)
             {
