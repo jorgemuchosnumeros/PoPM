@@ -146,6 +146,7 @@ namespace PoPM
             Write(value.Position);
             Write(value.FacingDirection);
             Write(value.Flags);
+            Write(value.JSONSkin);
         }
 
         public void Write(ActorStateFlags value)
@@ -328,6 +329,7 @@ namespace PoPM
                 Position = ReadVector3(),
                 FacingDirection = ReadVector3(),
                 Flags = ReadActorFlags(),
+                JSONSkin = ReadVillager(),
             };
         }
 
@@ -338,6 +340,13 @@ namespace PoPM
                 Disconnected = ReadBoolean(),
                 Dead = ReadBoolean(),
             };
+        }
+
+        public string ReadVillager()
+        {
+            System.Random random = new System.Random();
+
+            return JsonUtility.ToJson(new CustomVillager());
         }
 
         public GameStatePacket ReadGameStatePacket()
