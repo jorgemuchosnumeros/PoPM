@@ -146,6 +146,22 @@ namespace PoPM
 
                 villager.AddComponent<NameTag>().GetComponent<NameTag>().nameTagText = actorPacket.Name;
 
+                CustomVillager customVillager = JsonUtility.FromJson<CustomVillager>(actorPacket.JSONSkin);
+
+                VillagerCreator otherVillagerCreator = villager.GetComponent<VillagerCreator>();
+                otherVillagerCreator.ClearCustomizationPreferences();
+                otherVillagerCreator.Bottom1 = customVillager.Bottom1;
+                otherVillagerCreator.Bottom2 = customVillager.Bottom1;
+                otherVillagerCreator.Top1 = customVillager.Top1;
+                otherVillagerCreator.Top2 = customVillager.Top2;
+                otherVillagerCreator.LaurelCrown = customVillager.LaurelCrown;
+                otherVillagerCreator.ChinBeard = customVillager.ChinBeard;
+                otherVillagerCreator.Hair = customVillager.Hair;
+                otherVillagerCreator.HairColor = customVillager.HairColor;
+                otherVillagerCreator.Gender = customVillager.Gender;
+                otherVillagerCreator.SkinColor = customVillager.SkinColor;
+                otherVillagerCreator.ApplyCustomizationChanges();
+
                 NetVillagers.Add(actorPacket.ID, villager);
 
                 NetVillagersSteamID2GameID.Add(new CSteamID(Convert.ToUInt64(actorPacket.SteamID)), actorPacket.ID);
@@ -208,7 +224,9 @@ namespace PoPM
                 SteamID = SteamID.m_SteamID.ToString(),
                 Position = fpsTransform.position,
                 FacingDirection = fpsTransform.eulerAngles,
+                JSONSkin = JsonUtility.ToJson(new CustomVillager()),
             };
+
             using (var writer = new ProtocolWriter(memoryStream))
             {
                 writer.Write(actorPacket);
