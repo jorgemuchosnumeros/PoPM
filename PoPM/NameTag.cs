@@ -1,5 +1,6 @@
 using System.Collections;
 using System.IO;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -11,17 +12,17 @@ namespace PoPM
 
         public static Camera Camera;
 
-        private static GameObject _nameTagPrefab;
+        public GameObject textInstance;
 
         public string nameTagText;
 
         public int nameTagFontSize = 16;
 
-        public GameObject textInstance;
+        private bool _setName;
+
+        private static GameObject _nameTagPrefab;
 
         private Text _nameTagText;
-
-        private bool _setName;
 
         private RectTransform _textParent;
 
@@ -61,9 +62,12 @@ namespace PoPM
 
             textInstance.SetActive(wtsVector.z > 0);
 
-            var localPosition = _textParent.localPosition;
-            _textParent.localPosition = new Vector3((wtsVector.x - Screen.width / 2), (wtsVector.y - Screen.height / 2),
-                localPosition.z);
+            _textParent.localPosition = new Vector3((wtsVector.x - Screen.width / 2), (wtsVector.y - Screen.height / 2), _textParent.localPosition.z);
+        }
+
+        private void OnDestroy()
+        {
+            Destroy(PoPmuiCanvas.GetComponentsInChildren<Transform>().Where(childTransform => childTransform.GetComponentInChildren<Text>().text.Contains(nameTagText)).Select(childTransform => childTransform.gameObject).First());
         }
 
         public static void CreateCanvas()
@@ -73,7 +77,6 @@ namespace PoPM
             PoPmuiCanvas.enabled = true;
             PoPmuiCanvas.renderMode = RenderMode.ScreenSpaceCamera;
             PoPmuiCanvas.planeDistance = 0.1f;
-
             Camera = Camera.main;
             PoPmuiCanvas.worldCamera = Camera;
 
